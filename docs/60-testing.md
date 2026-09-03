@@ -57,10 +57,10 @@
 ## MCP 冒烟断言
 
 1. `initialize` 结果宣告 `tools.listChanged == true`。
-2. 初始 `tools/list` 恰好 4 个（DISCOVERY 集）。
+2. 初始 `tools/list` 恰好 6 个（DISCOVERY 集）。
 3. `lock_source`（对合成 kingst CSV）后：客户端收到 `notifications/tools/list_changed`；重新 list 得 **11** 个（含 add_source / lock_protocol）；返回文本包含解锁工具名。
 4. 越权调用 `run_decode`（在 DISCOVERY）→ 错误消息包含 `lock_protocol` 引导。
-5. `lock_protocol(uart)` → **15** 工具；`run_decode` → 计数摘要；`render_timing` 返回内容含 `image/png` ImageContent 与表文本。
+5. `lock_protocol(uart)` → **18** 工具；`run_decode` → 计数摘要；`render_timing` 返回内容含 `image/png` ImageContent 与表文本。
 6. `reset_session` → 回 6 工具 + list_changed。
 7. 多源并行（ADR-008 v1.2）：`add_source` ×2 → 各源独立 `lock_protocol`（可不同协议）→ `run_decode()` 一次并行解码全部源（分节摘要）→ `get_events/render_timing/export_events` 按 source 取数（多源缺省得到引导错误）→ `unlock_protocol` 单源不影响他源。
 

@@ -12,7 +12,7 @@
 |---|---|
 | 每种采集器导出格式都不同（Kingst CSV/kvdat/bin、RIGOL CSV/NPZ、MCU 串口裸数据…），分析脚本一次性、不可复用 | 采集上下文 + 格式嗅探 + 统一信号模型（一次适配，处处可用） |
 | 协议解析逻辑复杂、多变（阈值切片 → 边沿提取 → 位级解码 → 帧重组 → 呈现），函数式写法很快失控 | 显式 DAG 图引擎：节点有类型化端口，可验证、可缓存、可局部重算、可被 LLM 检视（`inspect_graph`） |
-| MCP server 一次暴露几十个工具，LLM 上下文被工具 schema 淹没 | 三阶段状态机（DISCOVERY → SOURCE_LOCKED → READY），锁定前只暴露 4 个工具 |
+| MCP server 一次暴露几十个工具，LLM 上下文被工具 schema 淹没 | 三阶段状态机（DISCOVERY → SOURCE_LOCKED → READY），锁定前只暴露 6 个工具 |
 | 解码结果难读：hex dump / 事件表 / 波形图彼此脱节 | 呈现上下文：图文配对（图内编号 span ↔ Markdown 表）+ 结构化 JSON/CSV 导出 |
 
 ## 目标（v1）
