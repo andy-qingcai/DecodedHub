@@ -67,7 +67,7 @@ class DigitalWave:              # 多通道数字 IR（位域跳变表）
     n_samples: int | None = None
 ```
 
-关键操作：`select(names)`（子集重掩码）、`edge_stream(name) -> (times, levels)`（单通道跳变）、`level_at(name, t)`（二分查电平）、`to_bool_array(name)`（重物化，测试/绘图用）、`from_bool_array(...)`（压缩构造）。
+关键操作：`select(names)`（子集重掩码）、`edge_stream(name) -> (times, levels)`（单通道跳变）、`level_at(name, t)`（二分查电平）、`to_bool_array(name)`（重物化，测试/绘图用）、`from_bool_array(...)`（压缩构造）、`from_segments(...)`（快照段构造入口；`t_start` 显式声明采集起点，可为负——构造后不可再突变）。
 
 ```python
 @dataclass

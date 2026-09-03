@@ -2,6 +2,11 @@
 
 模拟→数字的唯一合法路径（ADR-002 规则 2）。阈值回写 meta.threshold_v 由
 应用层在图外完成（图内保持纯函数，Capture 元数据只读）。
+
+算法（向量化滞回）：只有越过上/下阈值的"定态样本"参与状态序列，死区样本
+继承前态——滞回保证相邻定态必交替（再次翻转必须先穿过对面阈值），因此对
+定态序列做一次相邻差分即得全部跳变。时间 O(n)、峰值内存 O(定态数)（一个
+下标数组），不物化逐采样候选（否则 50M 点方波 ≈ 数 GB 的 Python 元组）。
 """
 
 from __future__ import annotations
@@ -15,6 +20,11 @@ from ..graph import Param
 from ..registry import register
 
 
+def _initial_level(v: np.ndarray, thr: float, hi: float, lo: float) -> int:
+    """首样本定初值：死区内按与阈值的相对位置取整。"""
+    return 1 if v[0] >= hi else (0 if v[0] <= lo else (1 if v[0] >= thr else 0))
+
+
 def slice_channel(
     ch: AnalogChannel, threshold: float | None, hysteresis: float | None
 ) -> tuple[float, float, int, list[tuple[float, int]]]:
@@ -23,22 +33,20 @@ def slice_channel(
     vmin, vmax = float(v.min()), float(v.max())
     thr = threshold if threshold is not None else (vmin + vmax) / 2.0
     h = hysteresis if hysteresis is not None else 0.2 * (vmax - vmin)
+    if h < 0:
+        raise ValueError(f"滞回宽度不能为负: {h}")
     hi, lo = thr + h / 2.0, thr - h / 2.0
+    initial = _initial_level(v, thr, hi, lo)
 
-    state = 1 if v[0] >= hi else (0 if v[0] <= lo else (1 if v[0] >= thr else 0))
+    idx = np.flatnonzero((v >= hi) | (v <= lo))  # 定态样本下标（死区样本跳过）
     edges: list[tuple[float, int]] = []
-
-    above = np.flatnonzero(v >= hi)
-    below = np.flatnonzero(v <= lo)
-    # 归并为时间序候选事件（下标序即时间序）
-    cand = sorted(
-        [(int(i), 1) for i in above] + [(int(i), 0) for i in below]
-    )
-    for i, lvl in cand:
-        if lvl != state:
-            edges.append((ch.time_at(i), lvl))
-            state = lvl
-    return thr, h, (1 if v[0] >= hi else (0 if v[0] <= lo else (1 if v[0] >= thr else 0))), edges
+    if idx.size:
+        s = (v[idx] >= hi).astype(np.int8)  # hi/lo 不重叠 ⇒ 二值互斥
+        flip = np.flatnonzero(s[1:] != s[:-1]) + 1
+        if s[0] != initial:
+            flip = np.concatenate(([0], flip))
+        edges = [(ch.time_at(int(idx[k])), int(s[k])) for k in flip]
+    return thr, h, initial, edges
 
 
 @register
@@ -56,13 +64,11 @@ class SlicerNode:
         channels: list[AnalogChannel] = inputs["in"]
         if not channels:
             raise ValueError("slicer 输入为空")
-        thr_used: list[float] = []
         all_edges: list[tuple[float, int, int]] = []  # (t, bit, level)
         initial = 0
         names: list[str] = []
         for i, ch in enumerate(channels):
             thr, h, init, edges = slice_channel(ch, params["threshold"], params["hysteresis"])
-            thr_used.append(thr)
             name = (params["names"][i] if params["names"] and i < len(params["names"]) else ch.name)
             names.append(name)
             initial |= (init & 1) << i
@@ -79,6 +85,6 @@ class SlicerNode:
                 snap = new
         t_start = min(ch.t0 for ch in channels)
         t_end = max(ch.t0 + ch.duration for ch in channels)
-        wave = DigitalWave.from_segments(names, initial, segments, t_end, sample_rate=None)
-        wave.t_start = t_start
+        wave = DigitalWave.from_segments(names, initial, segments, t_end,
+                                         t_start=t_start, sample_rate=None)
         return {"out": wave}

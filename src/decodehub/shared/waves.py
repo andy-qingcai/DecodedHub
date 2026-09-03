@@ -186,11 +186,13 @@ class DigitalWave:
         initial: int,
         segments: list[tuple[float, int]],
         t_end: float,
+        t_start: float = 0.0,
         sample_rate: float | None = None,
         n_samples: int | None = None,
     ) -> "DigitalWave":
         """由 [(t, 跳变后位域快照)] 构造（适配器/合成器入口）。
 
+        t_start = 采集起点（首段之前电平 = initial；MHO98 等源可为负）。
         自动丢弃与前一快照相同的段（合成器可能产生无变化沿）。
         """
         # 同一时刻多个快照 → 取最后；再按时间序去重无变化段
@@ -209,7 +211,7 @@ class DigitalWave:
         return DigitalWave(
             channels=tuple(channels),
             initial=initial,
-            t_start=0.0,
+            t_start=t_start,
             edges_t=np.array(times, dtype=np.float64),
             edges_levels=np.array(levels, dtype=np.uint32),
             t_end=t_end,
