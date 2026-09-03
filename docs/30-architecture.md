@@ -112,7 +112,7 @@ class Node(Protocol):
 
 ### 通道自动映射
 
-`lock_protocol` 依据协议所需角色（UART: `rx`；I2C: `scl,sda`；SPI: `clk,[miso],[mosi],[cs]`）在 `Capture` 中自动选通道：优先匹配常见名（`rx/tx/scl/sda/clk/sck/mosi/miso/cs`、`通道 N`/`channel N`/`D N` 的数字），否则取前 N 个数字通道，并在返回的"解码计划"中明示映射结果供 LLM 确认/覆盖（`lock_protocol(params={"rx": "通道 3"})`）。
+`lock_protocol` 依据协议绑定（ADR-014）声明的角色（UART: `rx`；I2C: `scl,sda`；SPI: `clk,[miso],[mosi],[cs]`）在 `Capture` 中自动选通道（映射算法在 `decode/bindings.py`——域内启发式）：优先匹配常见名（`rx/tx/scl/sda/clk/sck/mosi/miso/cs`、`通道 N`/`channel N`/`D N` 的数字），否则取前 N 个数字通道，并在返回的"解码计划"中明示映射结果供 LLM 确认/覆盖（`lock_protocol(params={"rx": "通道 3"})`）。
 
 ## 会话状态机（应用层）
 
@@ -138,15 +138,18 @@ DISCOVERY ──lock_source(成功)──▶ SOURCE_LOCKED ──lock_protocol(�
 
 ## 扩展指南
 
-**新增协议**（ADR-012：一协议一目录，预计 ~300 行 + 文档 + 测试）：
-1. `decode/protocols/<proto>/decode.py` 实现 `Node`（INPUTS/OUTPUTS/PARAMS/run），事件继承 `DecodedEvent`；
+**新增协议**（ADR-012/013/014：一协议一目录，预计 ~350 行 + 文档 + 测试）：
+1. `decode/protocols/<proto>/decode.py` 实现 `Node`（INPUTS/OUTPUTS/PARAMS/run，参数必附 doc——目录文案由它派生），事件继承 `DecodedEvent`；
 2. `decode/protocols/<proto>/encode.py` 合成编码器（往返测试的编码方向）；
-3. `decode/protocols/<proto>/README.md` **编解码原理文档**（波形模型/发送侧/接收侧/参数/事件/测试锚点）；
+3. `decode/protocols/<proto>/binding.py` 协议绑定（角色/通道数需求/参数路由/锚依赖声明，ADR-014）；
 4. `decode/protocols/<proto>/present.py` 注册呈现约定（ADR-013：中文名/内容列/CSV 专有列/是否上时序图/preview kind）；
-5. `protocols/__init__.py` 加一行导入（解码器 + 呈现注册）；
-6. `app/services.py` 的 PROTOCOL_CATALOG 加一行（角色、参数说明、图模板分支）；
+5. `decode/protocols/<proto>/README.md` **编解码原理文档**（波形模型/发送侧/接收侧/参数/事件/测试锚点）；
+6. `protocols/<proto>/__init__.py` 加一行导入（解码器 + 绑定 + 呈现注册）；
 7. `tests/property/` 往返测试。
-引擎、网关零改动；呈现零改动（协议侧 `present.py` 注册，ADR-013），新协议的事件自动获得 JSON/Markdown/CSV/图表渲染（渲染只依赖 `DecodedEvent` 基础字段）。
+引擎、网关、呈现、**应用层**零改动——图模板由 `decode/bindings.py` 的
+`build_lock_graph` 按绑定统一构建（数字/切片/模拟直达/跨源扇入四形态），
+工具目录 `PROTOCOL_CATALOG` 从绑定与 `Node.PARAMS.doc` 派生，
+新协议事件自动获得 JSON/Markdown/CSV/图表渲染（渲染只依赖 `DecodedEvent` 基础字段）。
 
 **新增采集格式**：
 1. `adapters/<name>.py`：`sniff(fp) -> bool` + `load(path, options) -> Capture`；

@@ -26,11 +26,11 @@ class UartDecodeNode:
     PARAMS = {
         "rx": Param("str", default="", doc="RX 通道名（空 = 第一个通道）"),
         "baud": Param("float_auto", default="auto", doc="波特率；'auto' = 自动估计"),
-        "data_bits": Param("int", default=8, lo=5, hi=9),
-        "parity": Param("enum", default="N", choices=("N", "O", "E")),
+        "data_bits": Param("int", default=8, lo=5, hi=9, doc="数据位 5–9"),
+        "parity": Param("enum", default="N", choices=("N", "O", "E"), doc="校验 N/O/E"),
         "stop_bits": Param("float", default=1.0, doc="停止位长度 1/1.5/2"),
         "invert": Param("bool", default=False, doc="线路反相（空闲低）"),
-        "bit_order": Param("enum", default="lsb", choices=("lsb", "msb")),
+        "bit_order": Param("enum", default="lsb", choices=("lsb", "msb"), doc="位序 lsb/msb"),
     }
 
     def run(self, inputs: dict[str, Any], params: dict[str, Any]) -> dict[str, Any]:
