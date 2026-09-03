@@ -156,6 +156,6 @@ DISCOVERY ──lock_source(成功)──▶ SOURCE_LOCKED ──lock_protocol(�
 
 ## 关键非功能决策
 
-- **性能**：数字路径 O(跳变数)；模拟样本 float32；均匀时间轴不物化 times 数组；绘图对模拟做每像素 min/max 包络抽取。
+- **性能**：数字路径 O(跳变数)；模拟样本 float32；均匀时间轴不物化 times 数组；绘图对模拟做每像素 min/max 包络抽取；slicer 为向量化滞回（O(n) 时间、O(定态数) 峰值内存——不物化逐采样候选，50M 点模拟切片不膨胀）。
 - **上下文经济**：工具 schema 精简（枚举内嵌于 description）；事件分页（`get_events(limit/offset)`）；大结果引导用 `export_events` 落盘。
 - **进程模型**：stdio 单会话/进程；stdout 仅协议流量，日志走 stderr（logging）。
