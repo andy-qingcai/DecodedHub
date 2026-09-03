@@ -16,13 +16,14 @@ def _naive(v, thr, h):
     """评审前的朴素实现（逐采样状态机），作为等价性参考。"""
     hi, lo = thr + h / 2.0, thr - h / 2.0
     state = 1 if v[0] >= hi else (0 if v[0] <= lo else (1 if v[0] >= thr else 0))
+    initial = state
     edges = []
     for i, x in enumerate(v):
         lvl = 1 if x >= hi else (0 if x <= lo else None)
         if lvl is not None and lvl != state:
             edges.append((float(i), lvl))
             state = lvl
-    return state, edges
+    return initial, edges
 
 
 def test_equivalence_with_naive_on_noisy_square():
@@ -33,7 +34,7 @@ def test_equivalence_with_naive_on_noisy_square():
     thr, h, initial, edges = slice_channel(ch, None, None)
     ref_initial, ref_edges = _naive(v.astype(np.float64), thr, h)
     assert initial == ref_initial
-    assert [(round(t, 9), lv) for t, lv in edges] == ref_edges
+    assert [(round(t, 9), lv) for t, lv in edges] == [(i / 1000.0, lv) for i, lv in ref_edges]
 
 
 def test_constant_signal_no_edges():
