@@ -106,7 +106,7 @@ class Node(Protocol):
 
 - **拉式记忆化**：`evaluate(graph, target_ids)`，递归下降即拓扑序；只计算目标的祖先。
 - 缓存键 = 节点 id（图在一次会话内不可变；参数变化 = 新图）。
-- 错误包装为 `NodeError(node_id, message, got_inputs)`：用户能看到"哪个阶段、喂了什么、为何失败"。
+- 错误包装为 `NodeError(node_id, message, got_inputs)`：用户能看到"哪个阶段、喂了什么、为何失败"。节点实现只抛领域异常（ValueError/KeyError），**不得自行构造 NodeError**——节点不知道自己的 spec id，包装与 id 注入是引擎的职责。
 - **解码错误是事件不是异常**：解码器永远返回完整事件列表，坏片段成为带 `errors` 标记的事件，解码在下一个恢复点（下一起始位 / START 条件 / CS 边沿）继续。截断的采集产生 `truncated` 事件。
 
 ### 通道自动映射

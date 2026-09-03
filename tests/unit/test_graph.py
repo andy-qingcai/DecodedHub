@@ -106,8 +106,11 @@ class TestEvaluate:
         g.add_node("u", "uart_decode", baud=9600)
         g.add_edge("pick", "out", "u", "in")
         cap = _capture_with_uart()
-        with pytest.raises(NodeError, match="pick"):
+        # 节点抛领域异常,引擎包装为 NodeError 且 node_id = spec id（非类型名）
+        with pytest.raises(NodeError) as ei:
             evaluate(g, get_registry(), ["u"], sources={"pick": {"in": cap}})
+        assert ei.value.node_id == "pick"
+        assert "NOPE" in str(ei.value) and "可用" in str(ei.value)
 
     def test_diamond_graph(self):
         # pick → uart → filter；pick → 另一 filter（扇出）
