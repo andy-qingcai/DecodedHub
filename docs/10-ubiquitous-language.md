@@ -52,7 +52,7 @@
 | 工程 | `Project` | 多采集源容器：N 个 `SourceEntry`（别名 + Capture）。**各源独立分析**（v1.2）。 |
 | 源条目 | `SourceEntry` | 工程中的一个采集源：别名 + Capture（+ 库级偏移/墙钟字段，见下）。 |
 | 别名 | alias | 源的短名（缺省 = 文件名 slug）；工具 `source` 参数按它指定源。 |
-| 协议锁 | `ProtocolLock` | 键 = **`源|协议`**（ADR-011）：一源可并存多协议锁（示波器双通道同时锁 uplink+downlink）；含协议、参数、通道映射、解码图、source_inputs（跨源注入）。工具以 source + 可选 protocol 消歧。 |
+| 协议锁 | `ProtocolLock` | 键 = **`源|协议`**（ADR-011）：一源可并存多协议锁（示波器双通道同时锁 uplink+downlink）；含协议、参数、通道映射、解码图、source_inputs（跨源注入）、图形状元数据 `graph_kind`（digital/sliced/analog_direct/downlink——呈现与回写按此分派，不得嗅探节点 id）。工具以 source + 可选 protocol 消歧。 |
 | 并行解码 | parallel decode | `run_decode()` 缺省对全部已锁源各自执行解码图，返回分节摘要。 |
 | ~~锚点对齐~~ | ~~anchor alignment~~ | 跨设备共同信号自动检测——**永久否决**（用户场景不可得）。 |
 | （库能力）合并/偏移 | `Project.merged` / offset | 多源合并到公共时间轴：保留为库能力 + 单测锚定，**不暴露于工具层**（v1.2 裁决：PC 时间戳 ≥百 ms 误差、不拆总线到多设备 → 无可信偏移来源）。 |

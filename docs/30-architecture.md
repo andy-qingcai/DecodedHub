@@ -77,7 +77,7 @@ LLM                    C5 网关                应用层                 C2/C3/
 | `digital` | `DigitalWave`         | `digital_pick` / `slicer` → 解码器 / `event_filter` 不消费 |
 | `analog`  | `list[AnalogChannel]` | `analog_pick` → `slicer`                             |
 | `events`  | `list[DecodedEvent]`  | 解码器 / `event_filter` → 呈现层（应用层读取）                    |
-| `scalar`  | `float/int/str`       | `baud_measure` 等（v1 预留）                              |
+| `scalar`  | `float/int/str`       | `slicer.threshold`（切片阈值，应用层回写 meta 后随图表标注）；`baud_measure` 等预留 |
 
 模拟 → 数字的唯一路径是 `slicer`（端口类型严格匹配，无隐式转换——验证期强制）。
 

@@ -29,6 +29,9 @@ class ProtocolLock:
 
     source_inputs: 图中需要注入 Capture 的节点 → 源别名（ADR-011 跨源注入；
     常规协议为单映射，downlink 为双映射：上行子图 + 本源）。
+    graph_kind:   图形状元数据（digital=数字直达 / sliced=模拟经切片 /
+                  analog_direct=模拟直达解码 / downlink=含上行锚子图）——
+                  呈现与回写按此分派，不得嗅探节点 id 字符串。
     """
 
     source: str
@@ -37,6 +40,7 @@ class ProtocolLock:
     channel_map: dict
     graph: Graph
     source_inputs: dict = None
+    graph_kind: str = "digital"
 
     def __post_init__(self) -> None:
         if self.source_inputs is None:

@@ -96,7 +96,7 @@ class Capture:
 - **kingst_bin → DigitalWave**：u16 位域流 → `np.flatnonzero(np.diff(stream))` 压缩；通道名缺省 `D0..D15`（导出时可能只含部分通道——与 CSV 列对齐问题由用户参数 `channels` 解决，默认全 16）。
 - **mho98_csv / npz → AnalogChannel**：CSV 从 `#` 前导取 points/xincrement；npz 判 `np.ptp(np.diff(t_s))` 近零 → 均匀化存 `(t0,dt)`，否则保留 times。
 - **mcu_adc_* → AnalogChannel**：`raw_scale` 路径保留原始码值与换算系数；CSV 时间列 ms→s 归一。
-- **切片回写**：`slicer` 使用的阈值写回 `meta.threshold_v`，随图表标注展示。
+- **切片回写**：`slicer` 经 `threshold` scalar 输出端口给出实际所用阈值（含缺省计算值），应用层在图外写回 `meta.threshold_v`（图内保持纯函数），`render_analog` 按其标注阈值线。
 
 ## 多源工程（Project，ADR-008 v1.2）
 

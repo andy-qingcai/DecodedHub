@@ -63,3 +63,19 @@ def test_first_sample_in_deadband_uses_threshold_rule():
 def test_negative_hysteresis_rejected():
     with pytest.raises(ValueError, match="滞回"):
         slice_channel(_ch(np.ones(10)), 1.0, -0.1)
+
+
+def test_slicer_node_exposes_threshold_scalar():
+    """scalar 输出端口：应用层据此回写 meta.threshold_v（docs/40 切片回写）。"""
+    from decodehub.decode import Graph, evaluate, get_registry
+    from decodehub.shared import Capture, CaptureMeta
+
+    v = np.concatenate([np.zeros(50), np.ones(50)]) * 2.0
+    cap = Capture(meta=CaptureMeta(source_kind="synth", format_key="synth"),
+                  analog=[_ch(v)])
+    g = Graph()
+    g.add_node("apick", "analog_pick")
+    g.add_node("slice", "slicer")
+    g.add_edge("apick", "out", "slice", "in")
+    memo = evaluate(g, get_registry(), ["slice"], sources={"apick": {"in": cap}})
+    assert memo["slice"]["threshold"] == pytest.approx(1.0)  # (Vmin+Vmax)/2

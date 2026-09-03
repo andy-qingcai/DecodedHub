@@ -53,7 +53,7 @@ def slice_channel(
 class SlicerNode:
     TYPE = "slicer"
     INPUTS = {"in": "analog"}
-    OUTPUTS = {"out": "digital"}
+    OUTPUTS = {"out": "digital", "threshold": "scalar"}
     PARAMS = {
         "threshold": Param("float", default=None, doc="阈值 V；缺省 = (Vmin+Vmax)/2"),
         "hysteresis": Param("float", default=None, doc="滞回宽度 V；缺省 = 0.2×幅值"),
@@ -67,8 +67,11 @@ class SlicerNode:
         all_edges: list[tuple[float, int, int]] = []  # (t, bit, level)
         initial = 0
         names: list[str] = []
+        first_thr: float | None = None
         for i, ch in enumerate(channels):
             thr, h, init, edges = slice_channel(ch, params["threshold"], params["hysteresis"])
+            if first_thr is None:
+                first_thr = thr  # 首通道所用阈值（threshold 参数全局；缺省时逐通道计算）
             name = (params["names"][i] if params["names"] and i < len(params["names"]) else ch.name)
             names.append(name)
             initial |= (init & 1) << i
@@ -87,4 +90,6 @@ class SlicerNode:
         t_end = max(ch.t0 + ch.duration for ch in channels)
         wave = DigitalWave.from_segments(names, initial, segments, t_end,
                                          t_start=t_start, sample_rate=None)
-        return {"out": wave}
+        # threshold: scalar 输出——应用层回写 meta.threshold_v 后随图表标注
+        # （docs/40 切片回写；图内保持纯函数，不触 Capture）
+        return {"out": wave, "threshold": first_thr}

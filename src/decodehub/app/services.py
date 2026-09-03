@@ -426,9 +426,15 @@ def lock_protocol(state: SessionState, protocol: str, params: dict | None,
         source_inputs = {"apick" if "apick" in graph.nodes else "pick": alias}
 
     lock_key = f"{alias}|{protocol}"
+    if protocol == "downlink":
+        graph_kind = "downlink"
+    elif protocol == "uplink":
+        graph_kind = "analog_direct"
+    else:
+        graph_kind = "digital" if cap.digital is not None else "sliced"
     state.locks[lock_key] = ProtocolLock(source=alias, protocol=protocol,
                                          params=params, channel_map=cmap, graph=graph,
-                                         source_inputs=source_inputs)
+                                         source_inputs=source_inputs, graph_kind=graph_kind)
     state.memos.pop(lock_key, None)  # 重建的图参数可能变化,缓存一律淘汰（run_decode 自行继承）
     state.stage = Stage.READY
     role_txt = ", ".join(f"{r}→`{c}`" for r, c in cmap.items())
@@ -503,6 +509,8 @@ def run_decode(state: SessionState, overrides: dict | None, source: str | None) 
         t0 = time.perf_counter()
         memo = evaluate(graph, get_registry(), targets=[node_id], sources=sources, memo=memo)
         state.memos[key] = memo
+        if "slice" in memo:  # 切片所用阈值回写 meta（docs/40；供图表标注）
+            state.capture_of(lock.source).meta.threshold_v = memo["slice"]["threshold"]
         wall_ms = (time.perf_counter() - t0) * 1000
         events: list[DecodedEvent] = memo[node_id]["out"]
         report = DecodeReport(
@@ -641,7 +649,7 @@ def render_timing(state: SessionState, t_min, t_max, max_frames, dpi, source,
     digital = cap.digital
     if digital is None:
         assert lock is not None and lock.graph is not None
-        if "slice" in lock.graph.nodes:
+        if lock.graph_kind == "sliced":
             # 模拟源（数字协议）：复用图求值取切片输出（命中会话 memo——
             # run_decode 已把 pick/slice 算过，这里零重算）
             slice_memo = state.memos.get(_key)
@@ -690,7 +698,9 @@ def render_analog(state: SessionState, channel, t_min, t_max, dpi, source) -> Pa
     p = store.path_for(cap.capture_id, f"analog_{tag}_{n_existing + 1}.png")
     lock = next((l for l in state.locks.values()
                  if l.source == alias), None)
-    thr = (lock.params.get("threshold") if lock else None)
+    thr = cap.meta.threshold_v  # 切片实际所用阈值（run_decode 回写,含缺省计算值）
+    if thr is None and lock is not None:
+        thr = lock.params.get("threshold")
     analog_plot(chs, p, digital=None, threshold=thr, t_min=t_min, t_max=t_max, dpi=dpi or 150,
                 title=f"模拟波形 · 源 {alias} · {cap.capture_id}")
     store.register(p, "figure", f"模拟波形（源 {alias}，{[c.name for c in chs]}）")
