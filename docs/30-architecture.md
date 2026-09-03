@@ -121,8 +121,8 @@ DISCOVERY ──lock_source(成功)──▶ SOURCE_LOCKED ──lock_protocol(�
     └──────────── reset_session ───────┴────────────────┴──────────────────┘
 ```
 
-- `SessionState`: `stage / capture / capture_id / graph_spec / report / artifacts / protocol / protocol_params`。
-- READY 阶段 `run_decode(overrides)` 允许改解码参数（如换 baud）→ 重建解码节点并重求值（上游 Capture/pick 结果仍命中缓存）。
+- `SessionState`: `stage / project / locks / reports / artifacts / memos`（locks/reports/memos 以 `源|协议` 键——一源可多协议锁）。
+- READY 阶段 `run_decode(overrides)` 允许改解码参数（如换 baud）→ 重建图并重求值；会话按锁保留图求值 memo（`evaluate(memo=…)`），重建时 type+params 未变的上游节点（pick/slice）直接命中缓存，参数变化的节点自动淘汰（`_inherit_memo`）。
 - 制品目录 `out/<capture_id>/`，文件名确定性（无时间戳），重复渲染幂等覆盖。
 
 ## 错误模型（跨层约定）

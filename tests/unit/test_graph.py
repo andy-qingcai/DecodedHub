@@ -126,3 +126,47 @@ class TestEvaluate:
         assert memo["f2"]["out"] == []
         # u 只求值一次（记忆化）
         assert set(memo) == {"pick", "u", "f1", "f2"}
+
+
+class TestMemoReuse:
+    """跨 run memo 复用（docs/30：改参数重解码只重算参数变化的节点）。"""
+
+    def _counting_registry(self, calls):
+        reg = dict(get_registry())
+
+        class CountingPick:
+            TYPE = "counting_pick"
+            INPUTS = {"in": "capture"}
+            OUTPUTS = {"out": "digital"}
+            PARAMS = {}
+
+            def run(self, inputs, params):
+                calls.append(1)
+                return {"out": inputs["in"].digital}
+
+        reg["counting_pick"] = CountingPick
+        return reg
+
+    def test_passed_memo_hits_without_rerun(self):
+        calls = []
+        reg = self._counting_registry(calls)
+        g = Graph()
+        g.add_node("p", "counting_pick")
+        cap = _capture_with_uart()
+
+        memo = evaluate(g, reg, ["p"], sources={"p": {"in": cap}})
+        assert len(calls) == 1
+
+        memo2 = evaluate(g, reg, ["p"], sources={"p": {"in": cap}}, memo=memo)
+        assert len(calls) == 1  # 命中缓存,未重算
+        assert memo2 is memo  # 返回值即缓存字典,可回存
+
+    def test_fresh_memo_reruns(self):
+        calls = []
+        reg = self._counting_registry(calls)
+        g = Graph()
+        g.add_node("p", "counting_pick")
+        cap = _capture_with_uart()
+        evaluate(g, reg, ["p"], sources={"p": {"in": cap}})
+        evaluate(g, reg, ["p"], sources={"p": {"in": cap}})  # 不传 memo → 重算
+        assert len(calls) == 2

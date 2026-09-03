@@ -47,9 +47,12 @@ class ProtocolLock:
 class SessionState:
     stage: Stage = Stage.DISCOVERY
     project: Project | None = None
-    locks: dict[str, ProtocolLock] = field(default_factory=dict)   # alias → lock
-    reports: dict[str, DecodeReport] = field(default_factory=dict)  # alias → 最近报告
+    locks: dict[str, ProtocolLock] = field(default_factory=dict)   # 源|协议 → lock
+    reports: dict[str, DecodeReport] = field(default_factory=dict)  # 源|协议 → 最近报告
     artifacts: ArtifactStore = field(default_factory=ArtifactStore)
+    # 图求值 memo 缓存（锁键 → 节点 id → 输出；docs/30：改参数重解码只重算参数
+    # 变化的节点，上游 pick/slice 命中缓存）。锁替换/解锁时同步淘汰。
+    memos: dict[str, dict] = field(default_factory=dict)
 
     # ---- 源访问 ----------------------------------------------------------
 

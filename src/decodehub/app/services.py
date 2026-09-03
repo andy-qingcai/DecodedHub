@@ -429,6 +429,7 @@ def lock_protocol(state: SessionState, protocol: str, params: dict | None,
     state.locks[lock_key] = ProtocolLock(source=alias, protocol=protocol,
                                          params=params, channel_map=cmap, graph=graph,
                                          source_inputs=source_inputs)
+    state.memos.pop(lock_key, None)  # 重建的图参数可能变化,缓存一律淘汰（run_decode 自行继承）
     state.stage = Stage.READY
     role_txt = ", ".join(f"{r}→`{c}`" for r, c in cmap.items())
     plan = (
@@ -451,6 +452,7 @@ def unlock_protocol(state: SessionState, source: str | None, protocol: str | Non
     for k, _l in hits:
         state.locks.pop(k, None)
         state.reports.pop(k, None)
+        state.memos.pop(k, None)
     if not state.locks:
         state.stage = Stage.SOURCE_LOCKED
     left = [f"{l.source}|{l.protocol}" for l in state.locks.values()]
@@ -485,18 +487,22 @@ def run_decode(state: SessionState, overrides: dict | None, source: str | None) 
     sections = []
     for key, lock in targets:
         graph, params = lock.graph, lock.params
+        memo = state.memos.pop(key, None) or {}
         if overrides:
             merged = {**lock.params, **overrides}
+            old_graph = lock.graph
             if lock.protocol == "downlink":
                 graph, params = _rebuild_downlink(lock, merged), merged
             else:
                 _p, graph = lock_protocol(state, lock.protocol, merged, lock.source)
                 params = merged
+            memo = _inherit_memo(old_graph, graph, memo)
         node_id = f"{lock.protocol}_decode"
         sources = {node: {"in": state.capture_of(a)}
                    for node, a in lock.source_inputs.items()}
         t0 = time.perf_counter()
-        memo = evaluate(graph, get_registry(), targets=[node_id], sources=sources)
+        memo = evaluate(graph, get_registry(), targets=[node_id], sources=sources, memo=memo)
+        state.memos[key] = memo
         wall_ms = (time.perf_counter() - t0) * 1000
         events: list[DecodedEvent] = memo[node_id]["out"]
         report = DecodeReport(
@@ -509,6 +515,19 @@ def run_decode(state: SessionState, overrides: dict | None, source: str | None) 
     n = len(targets)
     header = "## 解码完成\n" + (f"（{n} 个协议锁并行解码）\n" if n > 1 else "")
     return header + "\n".join(sections)
+
+
+def _inherit_memo(old_graph: Graph, new_graph: Graph, memo: dict | None) -> dict:
+    """跨图继承求值缓存：仅保留 type+params 完全一致的节点（参数变化即失效）。"""
+    memo = memo or {}
+    kept: dict = {}
+    for nid, out in memo.items():
+        old_spec, new_spec = old_graph.nodes.get(nid), new_graph.nodes.get(nid)
+        if (old_spec is not None and new_spec is not None
+                and old_spec.type == new_spec.type
+                and old_spec.params == new_spec.params):
+            kept[nid] = out
+    return kept
 
 
 def _rebuild_downlink(lock: ProtocolLock, merged_params: dict) -> Graph:
@@ -623,9 +642,12 @@ def render_timing(state: SessionState, t_min, t_max, max_frames, dpi, source,
     if digital is None:
         assert lock is not None and lock.graph is not None
         if "slice" in lock.graph.nodes:
-            # 模拟源（数字协议）：复用图求值取切片输出
+            # 模拟源（数字协议）：复用图求值取切片输出（命中会话 memo——
+            # run_decode 已把 pick/slice 算过，这里零重算）
+            slice_memo = state.memos.get(_key)
             sl = evaluate(lock.graph, get_registry(), targets=["slice"],
-                          sources={"apick": {"in": cap}})
+                          sources={"apick": {"in": cap}}, memo=slice_memo)
+            state.memos[_key] = sl
             digital = sl["slice"]["out"]
         else:
             # 模拟直达协议（uplink，ADR-010）：渲染原始模拟 + 事件 span

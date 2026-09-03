@@ -40,7 +40,7 @@
 | 图文配对 | figure-table pairing | 时序图中帧 span 只标编号，详细内容放同一次工具返回的 Markdown 表——避免图内文字重叠。 |
 | 制品 | `Artifact` | 呈现层产物（PNG/CSV/JSON/MD 文件）的登记项：路径、类型、说明、字节数。落盘于 `out/<capture_id>/`。 |
 | 会话 | `Session` | 一个 MCP 客户端连接的生命周期。以会话对象身份为键持有 `SessionState`。 |
-| 会话状态 | `SessionState` | 三阶段状态机 + 工程与已锁定的协议参数 / 最近解码报告 / 制品清单。 |
+| 会话状态 | `SessionState` | 三阶段状态机 + 工程与已锁定的协议参数 / 最近解码报告 / 制品清单 / 图求值 memo 缓存（按锁键，跨 run 复用）。 |
 | 阶段 | `Stage` | `DISCOVERY` → `SOURCE_LOCKED` → `READY`。工具可见性由阶段决定（6 → 11 → 18，累积解锁；权威数字以 50-mcp-gateway 为准）。 |
 | 锁定 | lock | `lock_source`（摄取首个源并创建工程）/ `add_source`（追加源）/ `lock_protocol`（选定解码协议与参数）。锁定动作触发 `tools/list_changed` 通知。 |
 | 门禁 | gate | 服务端在 `call_tool` 中强制校验"该工具在当前阶段可用"；即使客户端工具列表缓存过期也安全。 |

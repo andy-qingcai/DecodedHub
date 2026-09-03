@@ -228,10 +228,16 @@ def evaluate(
     registry: Mapping[str, type],
     targets: list[str],
     sources: Mapping[str, Mapping[str, Any]] | None = None,
+    memo: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """拉式记忆化求值：只计算 targets 的祖先；sources 为注入的外部输入。"""
+    """拉式记忆化求值：只计算 targets 的祖先；sources 为注入的外部输入。
+
+    memo 可传入外部缓存（如会话按锁保留的跨 run 缓存）：已命中的节点不再重算，
+    返回值即该缓存字典（调用方可回存）。跨图复用时由调用方负责淘汰参数变化的
+    节点（memo 只按节点 id 键控，不含参数指纹）。
+    """
     sources = dict(sources or {})
-    memo: dict[str, dict[str, Any]] = {}
+    memo = memo if memo is not None else {}
     busy: set[str] = set()
 
     def ev(nid: str) -> dict[str, Any]:
