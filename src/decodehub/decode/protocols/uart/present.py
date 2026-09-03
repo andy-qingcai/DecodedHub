@@ -3,12 +3,7 @@
 from __future__ import annotations
 
 from ...events import UartEvent
-from ...presentation import Presentation, register_presentation
-
-
-def _ascii(byte: int) -> str:
-    c = chr(byte)
-    return c if c.isprintable() and 32 <= byte < 127 else "·"
+from ...presentation import Presentation, ascii_byte as _ascii, register_presentation
 
 
 def _detail(ev: UartEvent) -> str:

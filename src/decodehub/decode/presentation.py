@@ -18,6 +18,12 @@ def _label_detail(ev: Any) -> str:
     return ev.label
 
 
+def ascii_byte(byte: int) -> str:
+    """字节 → 可打印 ASCII 字符；不可打印显示 '·'（各协议 detail_fn 共用）。"""
+    c = chr(byte)
+    return c if c.isprintable() and 32 <= byte < 127 else "·"
+
+
 @dataclass(frozen=True)
 class Presentation:
     """一个协议族（kind 前缀）的呈现约定。"""

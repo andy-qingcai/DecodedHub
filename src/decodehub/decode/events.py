@@ -104,9 +104,3 @@ class DecodeReport:
             "events": [e.to_dict() for e in self.events],
         }
 
-
-def timed_report(protocol: str, params: dict, events: list[DecodedEvent], node_id: str) -> DecodeReport:
-    events.sort(key=lambda e: (e.t_start, e.t_end))
-    return DecodeReport(
-        protocol=protocol, params=params, events=events, node_id=node_id, wall_ms=0.0
-    )
