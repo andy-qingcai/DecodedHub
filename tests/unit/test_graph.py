@@ -173,3 +173,15 @@ class TestMemoReuse:
         evaluate(g, reg, ["p"], sources={"p": {"in": cap}})
         evaluate(g, reg, ["p"], sources={"p": {"in": cap}})  # 不传 memo → 重算
         assert len(calls) == 2
+
+
+class TestParamDefaults:
+    def test_mutable_default_not_shared(self):
+        from decodehub.decode.graph import NodeSpec, _validate_params
+        from decodehub.decode.nodes.picks import DigitalPickNode
+        a = _validate_params(NodeSpec(id="a", type="digital_pick"), DigitalPickNode)
+        b = _validate_params(NodeSpec(id="b", type="digital_pick"), DigitalPickNode)
+        assert a["channels"] == [] and b["channels"] == []
+        assert a["channels"] is not b["channels"]  # 逐次物化,不共享实例
+        a["channels"].append("X")  # 污染不外溢
+        assert _validate_params(NodeSpec(id="c", type="digital_pick"), DigitalPickNode)["channels"] == []

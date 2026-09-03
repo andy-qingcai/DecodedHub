@@ -144,8 +144,12 @@ def _validate_params(spec: NodeSpec, node_cls: type) -> dict[str, Any]:
             raise GraphValidationError(
                 "params", f"节点 {spec.id}({spec.type}) 缺少必填参数 {name!r}"
             )
+        elif p.default is None:
+            out[name] = None  # None = "未提供"约定，缺省语义由节点自行解释
         else:
-            out[name] = p.default
+            # 缺省值走同一 coerce 路径并逐次物化——声明中的可变默认（如 list）
+            # 不跨节点/跨求值共享实例
+            out[name] = p.coerce(p.default, spec.id)
     return out
 
 
