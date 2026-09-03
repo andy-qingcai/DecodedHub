@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# 平台产物（运行时生成，不入库）
+out/
+profiles/
+
+# OS / 编辑器
+.DS_Store
+.obsidian/
+
+# 大体积真实采集（15M×2，按 capture.md 手册从 mho98 data/ 复制）
+tests/data/uplink24ms_ch1.npz
+tests/data/uplink24ms_ch2.npz
