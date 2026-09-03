@@ -78,7 +78,8 @@ I2C 同时输出细粒度事件（start/addr/data，供绘图标注）与**传�
 | 下行 DBPSK | `protocols/downlink/` | [README](../src/decodehub/decode/protocols/downlink/README.md) | **analog + events 扇入**（含 vendored dpsk.py） |
 
 共性裁决：解码全部**跳变/事件驱动**（ADR-005）；解码错误是事件字段（ADR-004）；
-上/下行协议形状参数全量可配、默认值 = 档案预设而非常量（ADR-011）。
+上/下行协议形状参数全量可配、默认值 = 档案预设而非常量（ADR-011）；
+公共辅助（模拟通道挑选/均匀性校验）统一走 `protocols/_shared.py`，协议间不得私有互导（ADR-012）。
 
 ## 4. 合成波形发生器（`synth.py`，测试矢量的编码方向）
 

@@ -23,6 +23,7 @@ from ....shared.waves import AnalogChannel
 from ...events import UplinkEvent
 from ...graph import Param
 from ...registry import register
+from .._shared import pick_channel as _pick_channel, require_uniform as _require_uniform
 from .dsss import UplinkConfig, decode_uplink, precondition, uplink_profile
 
 _COMMON_PARAMS = {
@@ -33,8 +34,6 @@ _COMMON_PARAMS = {
 }
 
 
-from .._shared import pick_channel as _pick_channel  # noqa: E402
-
 
 def _build_cfg(params: dict[str, Any]) -> UplinkConfig:
     over: dict[str, Any] = {}
@@ -44,15 +43,6 @@ def _build_cfg(params: dict[str, Any]) -> UplinkConfig:
         return uplink_profile(params.get("profile") or "default", **over)
     except KeyError as e:
         raise ValueError(f"未知上行协议档案: {e}") from e
-
-
-def _require_uniform(ch: AnalogChannel) -> tuple[np.ndarray, float]:
-    if ch.dt is None:
-        raise ValueError(
-            f"通道 {ch.name!r} 时间轴非均匀（均匀采样是 DSSS 相关的前提）；"
-            f"请用均匀采样导出重试"
-        )
-    return np.asarray(ch.samples, dtype=np.float64), float(ch.dt)
 
 
 @register

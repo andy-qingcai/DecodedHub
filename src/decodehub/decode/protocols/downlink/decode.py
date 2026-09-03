@@ -16,14 +16,12 @@ from __future__ import annotations
 
 from typing import Any
 
-import numpy as np
-
 from ....shared.waves import AnalogChannel
 from ...events import DecodedEvent, DownlinkEvent
 from ...graph import Param
 from ...registry import register
 from .dpsk import decode_downlink, downlink_profile
-from .._shared import pick_channel as _pick_channel
+from .._shared import pick_channel as _pick_channel, require_uniform as _require_uniform
 
 
 @register
@@ -58,10 +56,8 @@ class DownlinkDecodeNode:
                 "sync 输入中没有上行帧（kind=uplink.frame）——下行解码以上行帧为锚，"
                 "请确认上行子图已接入且解出帧"
             )
-        if ch.dt is None:
-            raise ValueError(f"通道 {ch.name!r} 时间轴非均匀（DBPSK 解调需均匀采样）")
-        fs = 1.0 / float(ch.dt)
-        y = np.asarray(ch.samples, dtype=np.float64)
+        y, dt = _require_uniform(ch)
+        fs = 1.0 / dt
 
         over: dict[str, Any] = {}
         if params.get("fc_nominal"):
