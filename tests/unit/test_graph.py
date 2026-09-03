@@ -185,3 +185,30 @@ class TestParamDefaults:
         assert a["channels"] is not b["channels"]  # 逐次物化,不共享实例
         a["channels"].append("X")  # 污染不外溢
         assert _validate_params(NodeSpec(id="c", type="digital_pick"), DigitalPickNode)["channels"] == []
+
+
+class TestRegisterContract:
+    def test_rejects_incomplete_node(self):
+        from decodehub.decode.registry import register
+
+        class NoPorts:
+            TYPE = "bad_no_ports"
+
+        with pytest.raises(ValueError, match="INPUTS"):
+            register(NoPorts)
+
+        class NoRun:
+            TYPE = "bad_no_run"
+            INPUTS = {"in": "capture"}
+            OUTPUTS = {"out": "digital"}
+            PARAMS = {}
+
+        with pytest.raises(ValueError, match="run"):
+            register(NoRun)
+
+    def test_rejects_duplicate_type(self):
+        from decodehub.decode.registry import register
+        from decodehub.decode.nodes.picks import DigitalPickNode
+
+        with pytest.raises(ValueError, match="重复注册"):
+            register(DigitalPickNode)

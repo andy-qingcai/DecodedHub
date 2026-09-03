@@ -93,6 +93,7 @@ class Node(Protocol):
 ```
 
 节点是纯函数：禁止文件 I/O、全局状态、随机数（合成发生器作为例外位于 `synth.py`，且不注册为节点，供测试与 examples 直接调用）。
+`@register` 在注册期即校验契约完整性（TYPE/INPUTS/OUTPUTS/PARAMS/run）——缺失当场报错，而非建图/求值时才以 AttributeError 暴露。
 
 ### 图规范与验证（构建期，全部可检错误）
 

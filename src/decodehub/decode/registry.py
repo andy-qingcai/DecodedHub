@@ -8,12 +8,22 @@ NODE_REGISTRY: dict[str, type] = {}
 
 
 def register(cls):
-    """类装饰器：以 cls.TYPE 为键注册节点实现。"""
+    """类装饰器：以 cls.TYPE 为键注册节点实现。
+
+    注册期即校验节点契约完整性（docs/30 节点契约：TYPE/INPUTS/OUTPUTS/
+    PARAMS/run 缺一不可）——缺失在 @register 时报错，而不是等到建图或
+    求值时才以 AttributeError 暴露。
+    """
     key = getattr(cls, "TYPE", None)
-    if not key:
-        raise ValueError(f"{cls.__name__} 缺少 TYPE 属性")
+    if not key or not isinstance(key, str):
+        raise ValueError(f"{cls.__name__} 缺少非空 str TYPE 属性")
     if key in NODE_REGISTRY:
         raise ValueError(f"节点类型重复注册: {key}")
+    for attr in ("INPUTS", "OUTPUTS", "PARAMS"):
+        if not isinstance(getattr(cls, attr, None), Mapping):
+            raise ValueError(f"节点 {key}({cls.__name__}) 缺少 {attr} 声明")
+    if not callable(getattr(cls, "run", None)):
+        raise ValueError(f"节点 {key}({cls.__name__}) 缺少 run(inputs, params)")
     NODE_REGISTRY[key] = cls
     return cls
 
