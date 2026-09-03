@@ -164,7 +164,7 @@ class I2cDecodeNode:
                     events.append(I2cEvent(
                         "i2c.data", byte_t0, t,
                         f"0x{byte:02X} ({'ACK' if ack else 'NAK'})",
-                        errors=([] if ack else []),
+                        errors=[],  # NACK 语义承载于 transfer.acks 与 ann_class
                         ann_class=("ack" if ack else "warn"),
                         byte_index=len(tr["bytes"]) - 1,
                     ))

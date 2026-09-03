@@ -104,7 +104,7 @@ class SpiDecodeNode:
                 w += 1
                 if w == wb:
                     flush_word(t0, ft, w, mv, sv)
-                    words.append((mv if mosi else 0, sv if miso else 0))
+                    words.append((mv if mosi else None, sv if miso else None))
                     w, mv, sv = 0, 0, 0
             flush_transfer(wave.t_start, wave.t_end, words)
             return {"out": events}
@@ -128,7 +128,7 @@ class SpiDecodeNode:
                 si += 1
                 if w == wb:
                     flush_word(t0, ft, w, mv, sv)
-                    words.append((mv if mosi else 0, sv if miso else 0))
+                    words.append((mv if mosi else None, sv if miso else None))
                     w, mv, sv = 0, 0, 0
             if w != 0:
                 events.append(SpiEvent("spi.warn", t0 or t_on, t_off, "CS 在词中翻转",

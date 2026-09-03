@@ -44,7 +44,7 @@ class SpiEvent(DecodedEvent):
     mosi: int | None = None
     miso: int | None = None
     word_bits: int = 8
-    words: list[tuple[int, int]] = field(default_factory=list)  # transfer 级
+    words: list[tuple[int | None, int | None]] = field(default_factory=list)  # transfer 级；缺侧 = None（与 word 事件一致）
 
 
 @dataclass

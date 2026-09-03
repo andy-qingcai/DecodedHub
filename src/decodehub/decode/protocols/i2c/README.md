@@ -30,7 +30,7 @@
 
 ## 事件
 
-`i2c.start / repeat-start / stop / addr / data / transfer / warn`；transfer 含 `address / is_10bit / read / data_bytes / acks[]`。
+`i2c.start / repeat-start / stop / addr / data / transfer / warn`；transfer 含 `address / is_10bit / read / data_bytes / acks[]`。NACK 语义只承载于 transfer 的逐字节 `acks[]`（data 事件以 ann_class=warn 呈现，`errors` 恒空）。
 
 ## 呈现约定（ADR-013，present.py 注册）
 

@@ -8,7 +8,7 @@ from ...presentation import Presentation, register_presentation
 
 def _detail(ev: SpiEvent) -> str:
     if ev.kind == "spi.transfer" and ev.words:
-        hexes = " ".join(f"{m:02X}" for m, _ in ev.words[:8])
+        hexes = " ".join("--" if m is None else f"{m:02X}" for m, _ in ev.words[:8])
         more = " …" if len(ev.words) > 8 else ""
         return f"{len(ev.words)} 词: [{hexes}{more}]"
     return ev.label

@@ -35,7 +35,7 @@ CPOL = 时钟空闲电平；CPHA = 采样发生在前导沿（0）或后导沿�
 
 ## 事件
 
-`spi.word`（mosi/miso 单词）、`spi.transfer`（CS 区间 + 有序 `words[]`）、`spi.warn`（no-cs / cs-midword）。
+`spi.word`（mosi/miso 单词）、`spi.transfer`（CS 区间 + 有序 `words[]`，未接线的缺侧 = None，与 word 事件的 mosi/miso 表示一致）、`spi.warn`（no-cs / cs-midword）。
 
 ## 呈现约定（ADR-013，present.py 注册）
 
