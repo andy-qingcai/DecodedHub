@@ -1,4 +1,4 @@
-"""decodehub.toml 解析 / 校验 / 采集集展开（ADR-014）。"""
+"""decodehub.toml 解析 / 校验 / 采集集展开（ADR-015）。"""
 
 from __future__ import annotations
 

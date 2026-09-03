@@ -14,7 +14,7 @@
 文件路径每次会话换（新采集），档案只固化不变的部分。
 通道角色钉死在 params 里 → open_project 时若采集缺该通道立即报错（接线防线）。
 
-ADR-014 起：`validate_profile_dict` 提供字段级精确校验（手写档案 / CLI validate /
+ADR-015 起：`validate_profile_dict` 提供字段级精确校验（手写档案 / CLI validate /
 测试共用）；`tool_version` 记录保存时的 decodehub 版本（升级后排查行为变化的锚点）。
 JSON Schema 见 schemas/profile.v1.schema.json（IDE 校验/补全用）。
 """
@@ -87,7 +87,7 @@ def _slug(name: str) -> str:
     return re.sub(r"[^0-9A-Za-z\u4e00-\u9fff_\-]+", "_", name).strip("_") or "profile"
 
 
-# ------------------------------------------------------------ 校验（ADR-014）---
+# ------------------------------------------------------------ 校验（ADR-015）---
 
 def validate_profile_dict(data: dict, *, known_formats: set[str] | None = None,
                           known_protocols: set[str] | None = None) -> list[str]:

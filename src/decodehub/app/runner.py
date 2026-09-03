@@ -1,4 +1,4 @@
-"""Headless 运行器（ADR-014）：ProjectConfig → 逐采集集 开工程 → 解码 → 导出/渲染 → 运行索引。
+"""Headless 运行器（ADR-015）：ProjectConfig → 逐采集集 开工程 → 解码 → 导出/渲染 → 运行索引。
 
 MCP 会话（services 状态机）面向 LLM 交互；本模块把同一批应用层用例
 （ingest / lock_protocol / run_decode / export / render）编排成**无会话依赖**的

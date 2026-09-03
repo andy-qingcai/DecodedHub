@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://decodehub.local/schemas/profile.v1.schema.json",
   "title": "decodehub 工程档案（Profile）v1",
-  "description": "固化源定义与各源协议锁（ADR-009/ADR-014）。手写时建议同时跑 `decodehub validate`（运行时校验更严格）。",
+  "description": "固化源定义与各源协议锁（ADR-009/ADR-015）。手写时建议同时跑 `decodehub validate`（运行时校验更严格）。",
   "type": "object",
   "additionalProperties": false,
   "required": ["name"],

@@ -1,4 +1,4 @@
-# ADR-014 · 声明式项目配置与 headless CLI（decodehub.toml + run/validate/diff）
+# ADR-015 · 声明式项目配置与 headless CLI（decodehub.toml + run/validate/diff）
 
 - 状态：已接受（2026-09-04）
 - 背景：平台唯一入口是 MCP stdio server——任何解码都要"起 LLM 会话 → 逐个调工具"。
@@ -10,7 +10,7 @@
 
 1. **两层配置模型，各管一段**：
    - **工程档案 Profile（ADR-009，不变）**：固化"源定义 + 协议锁 + 通道角色"，
-     是工具生成/可手写的 JSON。ADR-014 补强：`validate_profile_dict` 字段级
+     是工具生成/可手写的 JSON。ADR-015 补强：`validate_profile_dict` 字段级
      校验（未知字段即报错，防拼写）、`tool_version` 记录保存时的 decodehub 版本、
      `schemas/profile.v1.schema.json` 供 IDE 校验。
    - **项目配置 `decodehub.toml`（新，`app/config.py`）**：自上而下的**手写**

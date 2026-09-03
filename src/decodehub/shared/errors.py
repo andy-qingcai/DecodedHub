@@ -77,4 +77,4 @@ class StageGateError(DecodehubError):
 
 
 class ConfigError(DecodehubError):
-    """项目配置（decodehub.toml / 工程档案 JSON）解析或校验失败（ADR-014）。"""
+    """项目配置（decodehub.toml / 工程档案 JSON）解析或校验失败（ADR-015）。"""

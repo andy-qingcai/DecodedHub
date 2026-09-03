@@ -1,4 +1,4 @@
-"""CLI/headless 全链路集成测试（ADR-014）：合成采集 → decodehub.toml → run/validate/diff。"""
+"""CLI/headless 全链路集成测试（ADR-015）：合成采集 → decodehub.toml → run/validate/diff。"""
 
 from __future__ import annotations
 

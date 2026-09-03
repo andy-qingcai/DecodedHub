@@ -1,4 +1,4 @@
-"""decodehub 命令行（ADR-014）：项目配置驱动的 headless 解码。
+"""decodehub 命令行（ADR-015）：项目配置驱动的 headless 解码。
 
     decodehub validate [CONFIG]              校验配置/档案/采集绑定（CI 首道防线）
     decodehub run [CONFIG] [选项]            开工程 → 解码 → 导出/渲染 → 运行索引

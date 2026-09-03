@@ -14,7 +14,7 @@
 | 解析复杂多变，函数式写法失控           | **图（DAG）节点流水线**：类型化端口、构建期五规则验证、拉式记忆化求值、`inspect_graph` 可检视                                                            |
 | MCP 工具 schema 淹没 LLM 上下文 | **三阶段渐进式暴露**：初始 6 工具 → 锁定数据源后 11 → 锁定协议后 18（`tools/list_changed` 实测生效 + 服务端门禁兜底）                                      |
 | **IO/仪器固定的重复调试，每次重新配置**  | **工程档案（Profile）**：`save_profile` 固化源定义+协议锁（通道角色钉死）→ 之后 `open_project(files)` 一步直达 READY；接线错误在打开时即被防线拦截                |
-| **团队/CI 的解码仍要 LLM 在场**       | **项目配置 + headless CLI（ADR-014）**：`decodehub.toml`（glob 批量 + 导出/渲染管线）→ `decodehub run` 一条命令出 index/summary；`diff` 做事件流回归对比                        |
+| **团队/CI 的解码仍要 LLM 在场**       | **项目配置 + headless CLI（ADR-015）**：`decodehub.toml`（glob 批量 + 导出/渲染管线）→ `decodehub run` 一条命令出 index/summary；`diff` 做事件流回归对比                        |
 | 解码结果难读                   | 图文配对：时序图帧 span 编号 ↔ Markdown 事件表；JSON/CSV 导出落盘                                                                        |
 
 ## 快速开始
@@ -41,7 +41,7 @@ run_decode()                                   # 全部已锁源并行解码
 
 ## 项目化 / CI（headless CLI，无需 LLM）
 
-定型后的解码用 `decodehub.toml` 描述，一条命令批量复跑（ADR-014，[完整参考](docs/70-headless-cli.md)）：
+定型后的解码用 `decodehub.toml` 描述，一条命令批量复跑（ADR-015，[完整参考](docs/70-headless-cli.md)）：
 
 ```toml
 version = 1
