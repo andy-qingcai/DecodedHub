@@ -170,12 +170,13 @@ class TestCrossDeviceDecode:
 
     def test_role_automap_with_namespace(self):
         """通道自动映射识别 `别名:` 前缀（按冒号后缀匹配）。"""
-        from decodehub.app.services import auto_map_channels
+        from decodehub.decode.bindings import auto_map_channels, get_binding
 
+        b = get_binding("i2c")
         chs = ["la:通道 0", "la:通道 1", "scope:CH1", "adc:电流"]
-        m = auto_map_channels(chs, "i2c", {})
+        m = auto_map_channels(chs, b, {})
         assert m == {"scl": "la:通道 0", "sda": "la:通道 1"}
-        m2 = auto_map_channels(["x:SCL", "y:SDA"], "i2c", {})
+        m2 = auto_map_channels(["x:SCL", "y:SDA"], b, {})
         assert m2 == {"scl": "x:SCL", "sda": "y:SDA"}
 
 

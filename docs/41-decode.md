@@ -65,7 +65,7 @@ I2C 同时输出细粒度事件（start/addr/data，供绘图标注）与**传�
 
 ## 3. 协议模块与编解码原理（ADR-012）
 
-> **一协议一目录**：`src/decodehub/decode/protocols/<协议>/{decode.py, encode.py, README.md}`。
+> **一协议一目录**：`src/decodehub/decode/protocols/<协议>/{decode.py, encode.py, binding.py, present.py, README.md}`（绑定声明见 ADR-014：角色/需求/参数路由/锚依赖；图模板统一由 `decode/bindings.py` 构建）。
 > 编码器（合成/往返测试的编码方向）与解码器同目录成对；**编解码原理文档随代码走**
 > （波形模型、发送侧编码、接收侧算法、参数、事件、测试锚点），本节只留索引。
 
@@ -79,7 +79,8 @@ I2C 同时输出细粒度事件（start/addr/data，供绘图标注）与**传�
 
 共性裁决：解码全部**跳变/事件驱动**（ADR-005）；解码错误是事件字段（ADR-004）；
 上/下行协议形状参数全量可配、默认值 = 档案预设而非常量（ADR-011）；
-公共辅助（模拟通道挑选/均匀性校验）统一走 `protocols/_shared.py`，协议间不得私有互导（ADR-012）。
+公共辅助（模拟通道挑选/均匀性校验）统一走 `protocols/_shared.py`，协议间不得私有互导（ADR-012）；
+图模板/角色/参数路由经协议绑定声明（ADR-014），应用层只做会话编排。
 
 ## 4. 合成波形发生器（`synth.py`，测试矢量的编码方向）
 

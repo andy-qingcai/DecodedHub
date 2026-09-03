@@ -89,7 +89,7 @@ src/decodehub/
 
 ## 扩展
 
-- **新协议**：实现 `Node` 子类（INPUTS/OUTPUTS/PARAMS/run）→ `@register` → `PROTOCOL_CATALOG` 加一行 → `synth.py` 加编码方向 → 往返测试。引擎/网关/呈现零改动。
+- **新协议**：协议目录四件套（`decode.py` 解码 + `encode.py` 编码 + `binding.py` 绑定声明 + `present.py` 呈现 + `README.md` 原理）→ `__init__.py` 一行导入 → 往返测试。引擎/网关/呈现/应用层零改动（ADR-012/013/014）。
 - **新格式**：`adapters/<name>.py` + `sniff.py` 规则表插行 + 样本测试。
 - 详见 [docs/30-architecture.md 扩展指南](docs/30-architecture.md)。
 

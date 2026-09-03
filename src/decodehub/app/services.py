@@ -2,7 +2,8 @@
 
 多源模型（ADR-008 v1.2）：**每源独立协议锁与解码**——各源时间轴独立、互不影响；
 合并/对齐是库能力（Project.merged），不进入工具流程。
-协议目录 PROTOCOL_CATALOG 是"新协议接入"的唯一登记点（扩展指南）。
+协议目录 PROTOCOL_CATALOG 从协议绑定（decode/bindings.py，ADR-014）派生；
+新协议接入的唯一登记点在 protocols/<p>/binding.py（扩展指南）。
 """
 
 from __future__ import annotations
@@ -20,8 +21,14 @@ from ..acquisition.sniff import PLANNED_FORMATS, SUPPORTED_FORMATS
 from ..decode.events import DecodeReport, DecodedEvent
 from ..decode.graph import Graph, evaluate, validate
 from ..decode.presentation import all_preview_kinds
+from ..decode.bindings import (
+    all_bindings,
+    auto_map_channels,
+    build_lock_graph,
+    get_binding,
+    strip_anchor_prefix,
+)
 from ..decode.registry import get_registry
-from ..render.artifacts import ArtifactStore
 from ..render.format import events_markdown, report_csv_rows, report_json
 from ..render.plots import analog_plot, timing_plot
 from ..shared.errors import ProtocolLockError
@@ -30,154 +37,29 @@ from .session import ProtocolLock, SessionState, Stage
 
 # ------------------------------------------------------------ 协议目录 ---
 
-PROTOCOL_CATALOG: dict[str, dict] = {
-    "uart": {
-        "roles": ["rx"],
-        "params": {
-            "baud": "波特率数值或 'auto'（默认 auto）",
-            "data_bits": "5–9（默认 8）",
-            "parity": "N/O/E（默认 N）",
-            "stop_bits": "1/1.5/2（默认 1）",
-            "invert": "线路反相（默认 false）",
-            "bit_order": "lsb/msb（默认 lsb）",
-            "rx": "显式指定 RX 通道名（覆盖自动映射）",
-        },
-        "needs": {"min_digital": 1},
-        "hint": "单线异步串口；rx 角色缺省取第一个数字通道",
-    },
-    "i2c": {
-        "roles": ["scl", "sda"],
-        "params": {
-            "scl": "SCL 通道名（覆盖自动映射）",
-            "sda": "SDA 通道名（覆盖自动映射）",
-            "stretch_warn_s": "时钟拉伸告警阈值秒（默认 0.001）",
-        },
-        "needs": {"min_digital": 2},
-        "hint": "两线同步总线；缺省第 1/2 个数字通道作 SCL/SDA",
-    },
-    "spi": {
-        "roles": ["clk", "mosi", "miso", "cs"],
-        "params": {
-            "clk": "CLK 通道名", "mosi": "MOSI 通道名", "miso": "MISO 通道名",
-            "cs": "CS 通道名（可省略：按位计数分词）",
-            "cpol": "0/1（默认 0）", "cpha": "0/1（默认 0）",
-            "word_bits": "1–32（默认 8）", "bit_order": "msb/lsb（默认 msb）",
-            "cs_active": "low/high（默认 low）",
-        },
-        "needs": {"min_digital": 2},
-        "hint": "四线同步总线（MISO 可省）；缺省第 1/2/3/4 个数字通道作 CLK/MOSI/MISO/CS",
-    },
-    "downlink": {
-        "roles": ["rx"],
-        "params": {
-            "rx": "下行模拟通道名（覆盖自动映射）",
-            "uplink_source": "上行锚源别名（该源须已锁 uplink；唯一 uplink 锁时可省）",
-            "profile": "下行协议档案名（默认 default；档案只是参数预设）",
-            "fc_nominal": "标称载波 Hz（默认 263000）",
-            "cycles_per_bit": "每 bit 载波周期数（默认 10）",
-            "n_bits": "包符号数含起始位（默认 17 = 1 起始 + 16 数据）",
-            "slot_offsets_us": "槽位偏移 µs 列表（默认 1970,4748,7525,10303,13081,15858）；"
-                              "锚点偏移 delta 由接收机逐包自校准，不配置",
-            "frame_hz": "上行帧网格频率 Hz（默认 60）",
-            "invert": "差分极性反转（默认 false）",
-        },
-        "needs": {"min_analog": 1, "min_digital": 0},
-        "hint": "下行 DBPSK（以上行帧为锚的槽位包；263kHz 方波载波、延迟线鉴相）。"
-                "要求上/下行通道来自同一次采集（同触发）；图上扇入：上行子图 events + 本源 analog",
-    },
-    "uplink": {
-        "roles": ["rx"],
-        "params": {
-            "rx": "模拟通道名（覆盖自动映射；模拟信号直达解码器，不经阈值切片）",
-            "profile": "协议档案名（默认 default；档案只是参数预设，非协议常量）",
-            "chip_s": "标称码片周期秒（缺省 1e-6；接收机自动估计实际速率）",
-            "pn_word": "PN 扩频字（默认 0x3DA60E45，接受 0x 前缀）",
-            "pn_len": "PN 码片数（默认 31）",
-            "pream": "前导位串（默认 '001'）",
-            "data_bits": "每帧数据位数（默认 5）",
-            "invert": "物理极性反相（默认 false）",
-            "unipolar": "码片 0/+A 编码（默认双极性 -A/+A）",
-            "msb_first": "PN 字高位在先（默认 true）",
-        },
-        "needs": {"min_analog": 1, "min_digital": 0},
-        "hint": "上行 DSSS（每 60Hz 周期一个 ~248µs 突发帧；PN 相关解扩，"
-                "需原始模拟采样——图路径: analog_pick → uplink_precond → uplink_decode）",
-    },
-}
+def _derive_protocol_catalog() -> dict[str, dict]:
+    """工具层协议目录：从协议绑定（ADR-014）派生。
 
-_ROLE_ALIASES = {
-    "rx": {"rx", "rxd", "din", "di", "sdin"},
-    "tx": {"tx", "txd", "dout", "do", "sdout"},
-    "scl": {"scl", "sck", "clk", "clock", "a5"},
-    "sda": {"sda", "dio", "data", "a4"},
-    "clk": {"sck", "clk", "scl", "clock"},
-    "mosi": {"mosi", "dout", "do", "sdout", "copi"},
-    "miso": {"miso", "din", "di", "sdin", "cipo"},
-    "cs": {"cs", "nss", "ss", "nsc", "enable", "ce"},
-}
-
-_CH_NUM = re.compile(r"(?:通道|channel|ch|d)\s*(\d+)", re.IGNORECASE)
+    唯一登记点在 protocols/<p>/binding.py；节点参数文档取自 Node.PARAMS.doc
+    （与校验同源，不再人工复写），角色覆盖与工具级参数（uplink_source）由
+    绑定补充。
+    """
+    reg = get_registry()
+    out: dict[str, dict] = {}
+    for b in all_bindings():
+        params = {name: p.doc for name, p in reg[b.node_type].PARAMS.items() if p.doc}
+        if b.precond_node_type:
+            params.update({name: p.doc for name, p in reg[b.precond_node_type].PARAMS.items()
+                           if p.doc and name not in params})
+        for r in b.roles:
+            params.setdefault(r, f"{r} 角色显式指定通道名（覆盖自动映射）")
+        params.update(b.tool_params_doc)
+        out[b.protocol] = {"roles": list(b.roles), "params": params,
+                           "needs": dict(b.needs), "hint": b.hint}
+    return out
 
 
-def _norm(name: str) -> str:
-    return re.sub(r"[\s_\-]+", "", name).lower()
-
-
-def _role_hit(name: str, aliases: set[str]) -> bool:
-    if _norm(name) in aliases:
-        return True
-    if ":" in name:
-        return _norm(name.rsplit(":", 1)[-1]) in aliases
-    return False
-
-
-def auto_map_channels(chs: list[str], protocol: str, overrides: dict) -> dict:
-    """角色 → 通道名：先按常见名匹配，再按序号回退，最后显式覆盖。"""
-    if not chs:
-        raise ProtocolLockError(f"协议 {protocol} 需要通道，但该源没有任何通道（数字或模拟）")
-    numbers = {}
-    for c in chs:
-        m = _CH_NUM.search(_norm(c))
-        numbers[c] = int(m.group(1)) if m else None
-
-    roles = PROTOCOL_CATALOG[protocol]["roles"]
-    mapping: dict[str, str] = {}
-    used: set[str] = set()
-    for role in roles:
-        aliases = _ROLE_ALIASES.get(role, {role})
-        hit = None
-        for c in chs:
-            if c in used:
-                continue
-            if _role_hit(c, aliases):
-                hit = c
-                break
-        if hit is None:  # 按序号（数字小的在前）
-            numbered = [c for c in chs if numbers[c] is not None and c not in used]
-            others = [c for c in chs if numbers[c] is None and c not in used]
-            pool = sorted(numbered, key=lambda c: numbers[c]) + others
-            if pool:
-                hit = pool[0]
-        if hit is not None:
-            mapping[role] = hit
-            used.add(hit)
-
-    for role in roles:
-        if overrides.get(role):
-            want = overrides[role]
-            if want not in chs:
-                raise ProtocolLockError(f"通道 {want!r} 不存在；可用: {chs}")
-            mapping[role] = want
-
-    need_min = PROTOCOL_CATALOG[protocol]["needs"].get("min_digital", 0)
-    required_roles = [r for r in roles if r not in ("miso", "cs")]
-    got = [r for r in required_roles if r in mapping]
-    if len(got) < len(required_roles) or len(mapping) < need_min:
-        raise ProtocolLockError(
-            f"协议 {protocol} 至少需要 {need_min} 个数字通道（角色 {roles}），"
-            f"实际可用 {len(chs)} 个: {chs}"
-        )
-    return mapping
+PROTOCOL_CATALOG: dict[str, dict] = _derive_protocol_catalog()
 
 
 # ---------------------------------------------------------------- 源管理 ---
@@ -295,11 +177,14 @@ def describe_capture(state: SessionState) -> str:
 
 def lock_protocol(state: SessionState, protocol: str, params: dict | None,
                   source: str | None) -> tuple[str, Graph]:
-    """按源锁定协议：source 缺省 = 唯一源；多源必须显式指定。"""
+    """按源锁定协议：source 缺省 = 唯一源；多源必须显式指定。
+
+    图模板/参数路由/角色映射全部来自协议绑定（decode/bindings.py，ADR-014）；
+    本函数只做会话编排：源类型约束、锚点解析、同触发校验、别名注入。
+    """
     if state.project is None or not state.project.entries:
         raise ProtocolLockError("请先 lock_source")
-    if protocol not in PROTOCOL_CATALOG:
-        raise ProtocolLockError(f"未知协议 {protocol!r}；可用: {list(PROTOCOL_CATALOG)}")
+    binding = get_binding(protocol)
     if source is None and len(state.project.entries) > 1:
         raise ProtocolLockError(
             f"多源工程必须指定 source；可用: {state.source_aliases()}"
@@ -308,133 +193,39 @@ def lock_protocol(state: SessionState, protocol: str, params: dict | None,
     alias = source or state.single_alias()
     params = dict(params or {})
 
-    if protocol == "uplink":
-        chs = [c.name for c in cap.analog]  # DSSS 需要模拟通道（角色映射基于模拟名）
+    # 源类型约束：模拟直达协议只接受模拟源（解调需要原始波形/幅度信息）
+    if binding.analog_direct and (cap.digital is not None or not cap.analog):
+        raise ProtocolLockError(
+            f"{protocol} 需要模拟通道（该协议需要原始波形，数字切片信号不可用）；"
+            f"该源请改用示波器/MCU ADC 导出"
+        )
+    if binding.analog_direct or cap.digital is None:
+        chs = [c.name for c in cap.analog]
     else:
-        chs = list(cap.digital.channels) if cap.digital is not None else [c.name for c in cap.analog]
-    cmap = auto_map_channels(chs, protocol, params)
+        chs = list(cap.digital.channels)
+    cmap = auto_map_channels(chs, binding, params)
 
-    graph = Graph()
-    decoder_params: dict = {}
-    if protocol == "uart":
-        decoder_params = {k: v for k, v in params.items()
-                          if k in ("baud", "data_bits", "parity", "stop_bits", "invert", "bit_order")}
-        decoder_params["rx"] = cmap["rx"]
-    elif protocol == "i2c":
-        decoder_params = {k: v for k, v in params.items() if k == "stretch_warn_s"}
-        decoder_params.update(scl=cmap["scl"], sda=cmap["sda"])
-    elif protocol == "spi":
-        decoder_params = {k: v for k, v in params.items()
-                          if k in ("cpol", "cpha", "word_bits", "bit_order", "cs_active")}
-        decoder_params["clk"] = cmap["clk"]
-        if "mosi" in cmap:
-            decoder_params["mosi"] = cmap["mosi"]
-        if "miso" in cmap:
-            decoder_params["miso"] = cmap["miso"]
-        if "cs" in cmap:
-            decoder_params["cs"] = cmap["cs"]
-    elif protocol == "uplink":
-        decoder_params = {k: v for k, v in params.items()
-                          if k in ("profile", "chip_s", "invert", "unipolar", "msb_first",
-                                   "pn_word", "pn_len", "pream", "data_bits")}
-        decoder_params["channel"] = cmap["rx"]
+    # 锚点解析 + 同触发校验（会话编排，ADR-011：绝不假设锚点偏移）
+    anchor: tuple[str, ProtocolLock] | None = None
+    if binding.requires_sync:
+        anchor = _resolve_sync_anchor(state, binding, alias, cap, params)
 
-    source_inputs: dict[str, str] = {}
-    if protocol == "downlink":
-        if cap.digital is not None or not cap.analog:
-            raise ProtocolLockError(
-                "downlink 需要模拟通道（DBPSK 解调需要原始波形）；该源请用示波器导出"
-            )
-        # 定位上行锚（ADR-011：下行以上行帧网格为锚，扇入 + 跨源注入）
-        ul_alias = params.get("uplink_source")
-        uplink_locks = {l.source: l for l in state.locks.values() if l.protocol == "uplink"}
-        if ul_alias:
-            if ul_alias not in uplink_locks:
-                raise ProtocolLockError(
-                    f"uplink_source={ul_alias!r} 未锁定 uplink 协议；"
-                    f"已锁 uplink 的源: {sorted(uplink_locks) or '（无）'}"
-                )
-        elif len(uplink_locks) == 1:
-            ul_alias = next(iter(uplink_locks))
-        else:
-            raise ProtocolLockError(
-                "downlink 需要 uplink_source 参数指定上行锚源"
-                + (f"；已锁 uplink 的源: {sorted(uplink_locks)}" if uplink_locks
-                   else "（请先对该源 lock_protocol(protocol='uplink')）")
-            )
-        params["uplink_source"] = ul_alias  # 物化解析结果（重建/档案复用）
-        ul_lock = uplink_locks[ul_alias]
-        ul_cap = state.capture_of(ul_alias)
-        if not ul_cap.analog:
-            raise ProtocolLockError(f"上行锚源 {ul_alias!r} 无模拟通道")
-        # 同触发校验：上行/下行必须来自同一次采集（时间轴一致），跨仪器无法对齐
-        t0_ul = float(ul_cap.analog[0].t0)
-        t0_dl = float(cap.analog[0].t0)
-        if abs(t0_ul - t0_dl) > 1e-3:
-            raise ProtocolLockError(
-                f"上行({ul_alias}) 与下行源 t0 相差 {abs(t0_ul - t0_dl)*1e3:.2f} ms——"
-                f"下行锚定要求两通道来自同一次采集（同触发）。请用示波器双通道同时导出。"
-            )
-        # 克隆上行子图（加前缀），接扇入
-        idmap = {}
-        for nid, spec in ul_lock.graph.nodes.items():
-            idmap[nid] = f"ul_{nid}"
-            graph.add_node(idmap[nid], spec.type, **spec.params)
-        for e in ul_lock.graph.edges:
-            graph.add_edge(idmap[e.src], e.src_port, idmap[e.dst], e.dst_port)
-        dl_params = {k: v for k, v in params.items()
-                     if k in ("profile", "fc_nominal", "cycles_per_bit", "n_bits",
-                              "slot_offsets_us", "frame_hz", "invert")}
-        dl_params["channel"] = cmap["rx"]
-        graph.add_node("apick", "analog_pick")
-        graph.add_node("downlink_decode", "downlink_decode", **dl_params)
-        graph.add_edge("apick", "out", "downlink_decode", "in")
-        graph.add_edge(idmap["uplink_decode"], "out", "downlink_decode", "sync")
-        source_inputs = {idmap["apick"]: ul_alias, "apick": alias}
-    elif protocol == "uplink":
-        if cap.digital is not None or not cap.analog:
-            raise ProtocolLockError(
-                "uplink 需要模拟通道（DSSS 解扩需要幅度信息，数字切片信号不可用）；"
-                "该源请改用示波器/MCU ADC 导出"
-            )
-        # ADR-010：模拟直达路径——analog_pick → uplink_precond → uplink_decode
-        # （不经 slicer：一位切片毁掉 PN 相关所需的软信息）
-        precond_params = {k: v for k, v in decoder_params.items() if k in ("profile", "chip_s")}
-        precond_params["channel"] = cmap["rx"]
-        graph.add_node("apick", "analog_pick")
-        graph.add_node("upre", "uplink_precond", **precond_params)
-        graph.add_edge("apick", "out", "upre", "in")
-        graph.add_edge("upre", "out", "uplink_decode", "in")
-    elif cap.digital is not None:
-        graph.add_node("pick", "digital_pick")
-        graph.add_edge("pick", "out", f"{protocol}_decode", "in")
-    else:
-        # 模拟源：analog_pick → slicer → 解码器（ADR-002：显式切片节点）
-        slicer_params: dict = {}
-        if "threshold" in params:
-            slicer_params["threshold"] = params["threshold"]
-        if "hysteresis" in params:
-            slicer_params["hysteresis"] = params["hysteresis"]
-        graph.add_node("apick", "analog_pick")
-        graph.add_node("slice", "slicer", **slicer_params)
-        graph.add_edge("apick", "out", "slice", "in")
-        graph.add_edge("slice", "out", f"{protocol}_decode", "in")
-    if f"{protocol}_decode" not in graph.nodes:
-        graph.add_node(f"{protocol}_decode", f"{protocol}_decode", **decoder_params)
+    graph, input_nodes = build_lock_graph(
+        binding,
+        channel_map=cmap,
+        tool_params=params,
+        source_kind="analog" if (binding.analog_direct or cap.digital is None) else "digital",
+        anchor_graph=anchor[1].graph if anchor else None,
+    )
     validate(graph, get_registry())
-    if not source_inputs:
-        source_inputs = {"apick" if "apick" in graph.nodes else "pick": alias}
+    source_inputs = {node: (anchor[0] if role == "anchor" else alias)
+                     for role, node in input_nodes.items()}
 
     lock_key = f"{alias}|{protocol}"
-    if protocol == "downlink":
-        graph_kind = "downlink"
-    elif protocol == "uplink":
-        graph_kind = "analog_direct"
-    else:
-        graph_kind = "digital" if cap.digital is not None else "sliced"
     state.locks[lock_key] = ProtocolLock(source=alias, protocol=protocol,
                                          params=params, channel_map=cmap, graph=graph,
-                                         source_inputs=source_inputs, graph_kind=graph_kind)
+                                         source_inputs=source_inputs,
+                                         graph_kind=binding.graph_kind_for(cap))
     state.memos.pop(lock_key, None)  # 重建的图参数可能变化,缓存一律淘汰（run_decode 自行继承）
     state.stage = Stage.READY
     role_txt = ", ".join(f"{r}→`{c}`" for r, c in cmap.items())
@@ -443,6 +234,44 @@ def lock_protocol(state: SessionState, protocol: str, params: dict | None,
         f"解码计划（inspect_graph 可查）:\n```\n{graph.to_text()}\n```"
     )
     return plan, graph
+
+
+def _resolve_sync_anchor(state: SessionState, binding, alias: str, cap, params: dict) -> tuple[str, ProtocolLock]:
+    """定位 requires_sync 协议的锚锁并做同触发校验（下行以上行帧网格为锚，ADR-011）。"""
+    sync_protocol = binding.requires_sync
+    sync_param = f"{sync_protocol}_source"
+    sync_locks = {l.source: l for l in state.locks.values() if l.protocol == sync_protocol}
+    wanted = params.get(sync_param)
+    if wanted:
+        if wanted not in sync_locks:
+            raise ProtocolLockError(
+                f"{sync_param}={wanted!r} 未锁定 {sync_protocol} 协议；"
+                f"已锁 {sync_protocol} 的源: {sorted(sync_locks) or '（无）'}"
+            )
+    elif len(sync_locks) == 1:
+        wanted = next(iter(sync_locks))
+    else:
+        raise ProtocolLockError(
+            f"{binding.protocol} 需要 {sync_param} 参数指定锚源"
+            + (f"；已锁 {sync_protocol} 的源: {sorted(sync_locks)}" if sync_locks
+               else f"（请先对该源 lock_protocol(protocol='{sync_protocol}')）")
+        )
+    params[sync_param] = wanted  # 物化解析结果（重建/档案复用）
+    anchor_lock = sync_locks[wanted]
+    anchor_cap = state.capture_of(wanted)
+    if not anchor_cap.analog:
+        raise ProtocolLockError(f"锚源 {wanted!r} 无模拟通道")
+    # 同触发校验：锚/本源必须来自同一次采集（时间轴一致），跨仪器对齐被
+    # ADR-008 v1.2 裁定不可行，此处不放松
+    t0_a = float(anchor_cap.analog[0].t0)
+    t0_b = float(cap.analog[0].t0)
+    if abs(t0_a - t0_b) > 1e-3:
+        raise ProtocolLockError(
+            f"锚源({wanted}) 与本源({alias}) t0 相差 {abs(t0_a - t0_b)*1e3:.2f} ms——"
+            f"{binding.protocol} 锚定要求两通道来自同一次采集（同触发）。"
+            f"请用示波器双通道同时导出。"
+        )
+    return wanted, anchor_lock
 
 
 def unlock_protocol(state: SessionState, source: str | None, protocol: str | None) -> str:
@@ -539,22 +368,16 @@ def _inherit_memo(old_graph: Graph, new_graph: Graph, memo: dict | None) -> dict
 
 
 def _rebuild_downlink(lock: ProtocolLock, merged_params: dict) -> Graph:
-    """下行锁参数重建：复用锁内嵌的上行子图（同别名上行锁可能已不存在）。"""
-    graph = Graph()
-    for nid, spec in lock.graph.nodes.items():
-        if nid.startswith("ul_"):
-            graph.add_node(nid, spec.type, **spec.params)
-    for e in lock.graph.edges:
-        if e.src.startswith("ul_") and e.dst.startswith("ul_"):
-            graph.add_edge(e.src, e.src_port, e.dst, e.dst_port)
-    dl = {k: v for k, v in merged_params.items()
-          if k in ("profile", "fc_nominal", "cycles_per_bit", "n_bits",
-                   "slot_offsets_us", "frame_hz", "invert")}
-    dl["channel"] = lock.graph.nodes["downlink_decode"].params.get("channel", "")
-    graph.add_node("apick", "analog_pick")
-    graph.add_node("downlink_decode", "downlink_decode", **dl)
-    graph.add_edge("apick", "out", "downlink_decode", "in")
-    graph.add_edge("ul_uplink_decode", "out", "downlink_decode", "sync")
+    """下行锁参数重建：从锁内嵌克隆还原锚子图（同别名上行锁可能已不存在），
+    经同一绑定模板重建——图构建逻辑全库只有 build_lock_graph 一份（ADR-014）。"""
+    binding = get_binding(lock.protocol)
+    graph, _nodes = build_lock_graph(
+        binding,
+        channel_map=lock.channel_map,
+        tool_params=merged_params,
+        source_kind="analog",
+        anchor_graph=strip_anchor_prefix(lock.graph),
+    )
     validate(graph, get_registry())
     return graph
 
