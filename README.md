@@ -3,7 +3,7 @@
 > 采集数据归一化 + 通信协议解码 + 可视化 的 **MCP 平台**。
 > 逻辑分析仪（Kingst / Saleae CSV）· 示波器（RIGOL MHO98）· MCU ADC —— 一次摄取，统一解码。
 
-[设计文档（DDD）](docs/00-vision.md) · [架构](docs/30-architecture.md) · [MCP 渐进式暴露](docs/50-mcp-gateway.md) · [ADR](docs/adr/)
+[设计文档（DDD）](docs/00-vision.md) · [架构](docs/30-architecture.md) · [MCP 渐进式暴露](docs/50-mcp-gateway.md) · [Headless CLI](docs/70-headless-cli.md) · [ADR](docs/adr/)
 
 ## 它解决什么
 
@@ -14,6 +14,7 @@
 | 解析复杂多变，函数式写法失控           | **图（DAG）节点流水线**：类型化端口、构建期五规则验证、拉式记忆化求值、`inspect_graph` 可检视                                                            |
 | MCP 工具 schema 淹没 LLM 上下文 | **三阶段渐进式暴露**：初始 6 工具 → 锁定数据源后 11 → 锁定协议后 18（`tools/list_changed` 实测生效 + 服务端门禁兜底）                                      |
 | **IO/仪器固定的重复调试，每次重新配置**  | **工程档案（Profile）**：`save_profile` 固化源定义+协议锁（通道角色钉死）→ 之后 `open_project(files)` 一步直达 READY；接线错误在打开时即被防线拦截                |
+| **团队/CI 的解码仍要 LLM 在场**       | **项目配置 + headless CLI（ADR-014）**：`decodehub.toml`（glob 批量 + 导出/渲染管线）→ `decodehub run` 一条命令出 index/summary；`diff` 做事件流回归对比                        |
 | 解码结果难读                   | 图文配对：时序图帧 span 编号 ↔ Markdown 事件表；JSON/CSV 导出落盘                                                                        |
 
 ## 快速开始
@@ -37,6 +38,32 @@ run_decode()                                   # 全部已锁源并行解码
 ```
 
 档案是 `profiles/gizmo-v3.json`（纯 JSON，可提交进固件仓库、团队共享）。
+
+## 项目化 / CI（headless CLI，无需 LLM）
+
+定型后的解码用 `decodehub.toml` 描述，一条命令批量复跑（ADR-014，[完整参考](docs/70-headless-cli.md)）：
+
+```toml
+version = 1
+[runs.main]
+profile = "gizmo-v3"          # 引用档案；也可 [runs.main.decode] 内联定义
+[runs.main.captures]
+la = "captures/*.kvdat"       # glob 批量；单文件别名自动广播
+[runs.main.export]
+formats = ["csv", "md"]
+[runs.main.render]
+timing = true
+```
+
+```bash
+decodehub validate            # 校验配置/档案/采集绑定（CI 首道防线）
+decodehub run                 # 批量解码 → reports/main/<采集集>/ + index.md
+decodehub diff reports/main/001_old/decoded.json reports/main/001_new/decoded.json
+                              # 事件流回归对比（忽略时间戳；不同则退出码 1）
+```
+
+档案/配置可提交进固件仓库进 code review；`schemas/profile.v1.schema.json`
+供 IDE 校验补全。
 
 ## 接入 MCP 客户端
 

@@ -21,6 +21,7 @@ dev = ["pytest>=8"]
 
 [project.scripts]
 decodehub-mcp = "decodehub.mcp_server.server:main"
+decodehub = "decodehub.cli.main:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

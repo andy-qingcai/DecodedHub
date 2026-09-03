@@ -5,6 +5,7 @@
 - 图:         GraphValidationError / NodeError
 - 协议锁定:    ProtocolLockError
 - MCP 门禁:    StageGateError
+- 项目配置:    ConfigError（decodehub.toml / 档案 JSON 的解析与校验）
 解码数据错误（坏帧等）不是异常——是事件上的 errors 字段（ADR-004）。
 """
 
@@ -73,3 +74,7 @@ class StageGateError(DecodehubError):
         super().__init__(
             f"工具 {tool} 需要 {needed} 阶段，当前处于 {current} 阶段。{hint}".strip()
         )
+
+
+class ConfigError(DecodehubError):
+    """项目配置（decodehub.toml / 工程档案 JSON）解析或校验失败（ADR-014）。"""
