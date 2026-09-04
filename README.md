@@ -95,7 +95,7 @@ export_events(format="csv", source="scope")   # out/<capture_id>/events.csv（�
 
 ## 支持矩阵（v1）
 
-- **格式**：kingst_csv / kingst_bin / kingst_kvdat · mho98_csv / mho98_npz（含上行采集）· mcu_adc_csv / mcu_adc_bin · saleae_csv（数字）· generic_csv（模拟兜底）
+- **格式**：kingst_csv / kingst_bin / kingst_kvdat · mho98_csv / mho98_npz（含扩频突发采集）· mcu_adc_csv / mcu_adc_bin · saleae_csv（数字）· generic_csv（模拟兜底）
 - **协议**：UART（auto-baud、5–9 位、奇偶、1/1.5/2 停止、反相）· I2C（7/10-bit、重复起始、时钟拉伸容忍）· SPI（四模式、CS 帧化、1–32 位词）· **上行 DSSS + 下行 DBPSK**（模拟直达：PN 相关解扩、码片速率自动估计、纯噪声诚实拒绝；下行以上行帧为锚做偏移解析——**跨节点扇入 + 跨源图注入**的示范；协议形状参数全量可配，ADR-010/011）
 - **图表**：数字时序图（帧着色+编号）、模拟波形+阈值叠加图
 

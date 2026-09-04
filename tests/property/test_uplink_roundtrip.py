@@ -172,7 +172,7 @@ class TestUplinkGraphPath:
         st.project = Project()
         st.project.add(SourceEntry(alias="tp", capture=cap, options={}))
         services.lock_protocol(st, "uplink", {"chip_s": 0.9692e-6}, source="tp")
-        services.save_profile(st, "tp-debug", "")
+        services.save_profile(st, "tp-debug", "DSSS 调试")
         st2 = SessionState()
         # npz 不需要——直接复用同一 capture 构造文件不方便；用 open_project 需要文件，
         # 这里验证档案内容与重开锁参数
