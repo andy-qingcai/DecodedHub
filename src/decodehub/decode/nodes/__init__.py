@@ -3,4 +3,4 @@
 协议解码器在 decodehub.decode.protocols/<协议>/（ADR-012）。
 """
 
-from . import picks, slicer, filters  # noqa: F401,E402
+from . import picks, slicer, filters, field_split  # noqa: F401,E402

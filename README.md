@@ -12,7 +12,7 @@
 | 每种采集器导出格式都不同，脚本一次性       | 格式嗅探 + 9 个适配器 → 统一信号模型（`DigitalWave` 位域跳变 IR / `AnalogChannel` 紧凑时间轴）                                                 |
 | **多台采集器同时采集，各自孤立**       | **多源并行分析（Project）**：`add_source` 追加各设备导出 → **每源独立锁协议**（可不同协议）→ `run_decode()` 一次并行解码全部 → 按源取事件/渲染/导出（制品目录天然隔离）；追加源零破坏 |
 | 解析复杂多变，函数式写法失控           | **图（DAG）节点流水线**：类型化端口、构建期五规则验证、拉式记忆化求值、`inspect_graph` 可检视                                                            |
-| MCP 工具 schema 淹没 LLM 上下文 | **三阶段渐进式暴露**：初始 6 工具 → 锁定数据源后 11 → 锁定协议后 18（`tools/list_changed` 实测生效 + 服务端门禁兜底）                                      |
+| MCP 工具 schema 淹没 LLM 上下文 | **三阶段渐进式暴露**：初始 6 工具 → 锁定数据源后 11 → 锁定协议后 19（含管线绑定，ADR-020）（`tools/list_changed` 实测生效 + 服务端门禁兜底）                                      |
 | **IO/仪器固定的重复调试，每次重新配置**  | **工程档案（Profile）**：`save_profile` 固化源定义+协议锁（通道角色钉死）→ 之后 `open_project(files)` 一步直达 READY；接线错误在打开时即被防线拦截                |
 | **团队/CI 的解码仍要 LLM 在场**       | **项目配置 + headless CLI（ADR-015）**：`decodehub.toml`（glob 批量 + 导出/渲染管线）→ `decodehub run` 一条命令出 index/summary；`diff` 做事件流回归对比                        |
 | 解码结果难读                   | 图文配对：时序图帧 span 编号 ↔ Markdown 事件表；JSON/CSV 导出落盘                                                                        |
@@ -25,6 +25,49 @@ cd decoded_all_in_one
 .venv/bin/python examples/demo.py # 全链路演示（合成→嗅探→解码→图表）
 .venv/bin/python -m pytest tests/ # 回归测试
 ```
+
+## 无仪器冷启动
+
+手边没有仪器、也没有采集文件？用内置合成器造一份 UART 采集，5 分钟走完
+**配置 → 校验 → 解码 → 报告** 全流程（多总线合成见
+`examples/complex-project/make_captures.py`）：
+
+```bash
+.venv/bin/python - <<'EOF'
+from pathlib import Path
+from decodehub.decode.synth import encode_uart, save_kingst_csv
+
+Path("captures").mkdir(exist_ok=True)
+wave = encode_uart(b"Hello decodehub", baud=115200, idle_bits=2.0, seed=1)
+save_kingst_csv(wave, Path("captures/hello.csv"))
+print("已生成 captures/hello.csv")
+EOF
+```
+
+写一份最小 `decodehub.toml`（内联解码定义，无需档案）：
+
+```toml
+version = 1
+[runs.main]
+[runs.main.decode.sources.la]
+format = "kingst_csv"
+[runs.main.decode.locks.la]
+protocol = "uart"
+params = { baud = 115200 }
+[runs.main.captures]
+la = "captures/hello.csv"
+[runs.main.export]
+formats = ["csv", "md"]
+```
+
+```bash
+decodehub validate    # 校验配置与采集绑定（不解码）
+decodehub run         # → reports/main/hello/ + index.md + summary.json
+```
+
+打开 `reports/main/index.md` 看运行汇总；`reports/main/hello/decoded.json`
+是机器可读的全量事件（diff/CI 的输入），`events.md` 是人读的事件表。
+之后把手里的真实采集文件路径换进 `[runs.main.captures]` 即可。
 
 ## 重复调试（IO/仪器固定时推荐）
 

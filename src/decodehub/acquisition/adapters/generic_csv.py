@@ -8,6 +8,7 @@ import numpy as np
 
 from ...shared.errors import IngestError
 from ...shared.waves import AnalogChannel, Capture, CaptureMeta
+from .spec import AdapterSpec, OptionField, VOLT_COL
 
 
 def load(path: str | Path, options: dict | None = None) -> Capture:
@@ -68,3 +69,23 @@ def load(path: str | Path, options: dict | None = None) -> Capture:
         extra={"rows": int(arr.shape[0])},
     )
     return Capture(meta=meta, analog=channels)
+
+
+def _sniff(ctx) -> bool:
+    hd = ctx.first_header()
+    if hd is None:
+        return False
+    header, _data = hd
+    low = [c.strip().lower() for c in header.split(",")]
+    return (any(c in ("x", "t", "t_s", "time", "time_s") for c in low)
+            and any(VOLT_COL.match(c) for c in low))
+
+
+SPEC = AdapterSpec(
+    key="generic_csv",
+    description="通用模拟 CSV（x/t 列 + 电压列；兜底）",
+    load=load,
+    sniff=_sniff,
+    sniff_hint="文本头（x/t 列 + 电压列）",
+    options=(OptionField("device", doc="设备显示名"),),
+)

@@ -125,9 +125,10 @@ class TestDownlinkRoundTrip:
         data = json.loads(p.read_text())
         assert data["protocol"] == "downlink"
         # CSV 协议专有列（ADR-013 注册表）：下行行填充 value/fc_hz/slot/frame/confidence
+        # （fields 三列由 ADR-016 追加在并集尾部，下行列位置不变）
         csv_p = services.export_events(st, "csv", None, source="ch2")
         lines = csv_p.read_text().strip().splitlines()
-        assert lines[0].endswith(",pream_ok,confidence,fc_hz,slot,frame")
+        assert lines[0].endswith(",pream_ok,confidence,fc_hz,slot,frame,fields,source_kind,spec")
         pk = next(l for l in lines[1:] if "downlink.packet" in l).split(",")
         assert pk[8] != "" and pk[16] != "" and pk[17] != "" and pk[18] != "" and pk[19] != ""
 

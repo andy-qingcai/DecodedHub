@@ -146,6 +146,13 @@ DISCOVERY ──lock_source(成功)──▶ SOURCE_LOCKED ──lock_protocol(�
 5. `decode/protocols/<proto>/README.md` **编解码原理文档**（波形模型/发送侧/接收侧/参数/事件/测试锚点）；
 6. `protocols/<proto>/__init__.py` 加一行导入（解码器 + 绑定 + 呈现注册）；
 7. `tests/property/` 往返测试。
+
+**协议客制图**（可选，ADR-022）：通用时序图表达不了的"协议自身最佳显示"
+（星座图/眼图/包结构图……）→ 新建 `render/contrib/<proto>.py` 自注册
+`(protocol, graph_kind) → RenderRoute`——投放即生效（pkgutil 发现，零共享
+文件改动），通用路由自动兜底；轻量差异（仍是时序图、只调标注/样式）优先
+扩展现有 present.py 数据级约定，不急于开客制模块。
+
 引擎、网关、呈现、**应用层**零改动——图模板由 `decode/bindings.py` 的
 `build_lock_graph` 按绑定统一构建（数字/切片/模拟直达/跨源扇入四形态），
 工具目录 `PROTOCOL_CATALOG` 从绑定与 `Node.PARAMS.doc` 派生，

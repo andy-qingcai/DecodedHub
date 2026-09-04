@@ -14,6 +14,7 @@ import numpy as np
 
 from ...shared.errors import IngestError
 from ...shared.waves import AnalogChannel, Capture, CaptureMeta
+from .spec import AdapterSpec, OptionField
 
 _KV = re.compile(r"(\w+)=([-\d.eE+]+)")
 
@@ -58,3 +59,17 @@ def load(path: str | Path, options: dict | None = None) -> Capture:
         extra={"preamble": preamble, "points": int(arr.shape[0])},
     )
     return Capture(meta=meta, analog=[ch])
+
+
+def _sniff(ctx) -> bool:
+    return bool(ctx.lines) and ctx.lines[0].startswith("# MHO98 waveform")
+
+
+SPEC = AdapterSpec(
+    key="mho98_csv",
+    description="RIGOL MHO98 MCP 导出 CSV（# 前导 + t_s,v_V）",
+    load=load,
+    sniff=_sniff,
+    sniff_hint="文本头（# MHO98 前导）",
+    options=(OptionField("name", doc="模拟通道名覆盖（缺省用前导 source=CHANx）"),),
+)

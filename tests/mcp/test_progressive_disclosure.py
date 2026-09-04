@@ -68,9 +68,9 @@ class TestProgressiveDisclosure:
 
             # 5) lock_protocol → READY
             res = await client.call_tool("lock_protocol", {"protocol": "uart"})
-            assert "协议已锁定" in _text(res)
+            assert "已锁定: **uart**" in _text(res)  # ADR-022：文案改为 锁`源|名` 已锁定
             tools = await client.list_tools()
-            assert len(tools.tools) == 18
+            assert len(tools.tools) == 19
             assert "run_decode" in sorted(t.name for t in tools.tools)
 
             # 6) run_decode → 往返数据正确

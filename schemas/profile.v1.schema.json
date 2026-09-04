@@ -5,28 +5,69 @@
   "description": "固化源定义与各源协议锁（ADR-009/ADR-015）。手写时建议同时跑 `decodehub validate`（运行时校验更严格）。",
   "type": "object",
   "additionalProperties": false,
-  "required": ["name"],
+  "required": [
+    "name"
+  ],
   "properties": {
-    "name": { "type": "string", "minLength": 1, "description": "档案名（非 ASCII/空格会 slug 化为文件名）" },
-    "description": { "type": "string", "description": "说明（板卡/固件版本等）" },
-    "version": { "type": "integer", "description": "档案格式版本", "default": 1 },
-    "created": { "type": "string", "description": "保存时间（工具自动填）" },
-    "tool_version": { "type": "string", "description": "保存时的 decodehub 版本（工具自动填）" },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "档案名（非 ASCII/空格会 slug 化为文件名）"
+    },
+    "description": {
+      "type": "string",
+      "description": "说明（板卡/固件版本等）"
+    },
+    "version": {
+      "type": "integer",
+      "description": "档案格式版本",
+      "default": 1
+    },
+    "created": {
+      "type": "string",
+      "description": "保存时间（工具自动填）"
+    },
+    "tool_version": {
+      "type": "string",
+      "description": "保存时的 decodehub 版本（工具自动填）"
+    },
     "sources": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["alias"],
+        "required": [
+          "alias"
+        ],
         "properties": {
-          "alias": { "type": "string", "minLength": 1, "description": "源别名（captures/open_project 的 files 键）" },
-          "format": {
-            "type": ["string", "null"],
-            "description": "格式键（省略 = 自动嗅探）",
-            "enum": ["kingst_csv", "kingst_bin", "kingst_kvdat", "mho98_csv", "mho98_npz",
-                     "mcu_adc_csv", "mcu_adc_bin", "saleae_csv", "generic_csv", null]
+          "alias": {
+            "type": "string",
+            "minLength": 1,
+            "description": "源别名（captures/open_project 的 files 键）"
           },
-          "options": { "type": "object", "description": "摄取选项（sample_rate/vref/bits/t_wall/offset…）" }
+          "format": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "格式键（省略 = 自动嗅探）",
+            "enum": [
+              "kingst_csv",
+              "kingst_bin",
+              "kingst_kvdat",
+              "mho98_csv",
+              "mho98_npz",
+              "mcu_adc_csv",
+              "mcu_adc_bin",
+              "saleae_csv",
+              "generic_csv",
+              null
+            ]
+          },
+          "options": {
+            "type": "object",
+            "description": "摄取选项（sample_rate/vref/bits/t_wall/offset…）"
+          }
         }
       }
     },
@@ -35,15 +76,35 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["source", "protocol"],
+        "required": [
+          "source",
+          "protocol"
+        ],
         "properties": {
-          "source": { "type": "string", "description": "所属源别名（须在 sources 中定义）" },
+          "source": {
+            "type": "string",
+            "description": "所属源别名（须在 sources 中定义）"
+          },
           "protocol": {
             "type": "string",
             "description": "协议名",
-            "enum": ["uart", "i2c", "spi", "uplink", "downlink"]
+            "enum": [
+              "uart",
+              "i2c",
+              "spi",
+              "uplink",
+              "downlink"
+            ]
           },
-          "params": { "type": "object", "description": "协议参数 + 通道角色钉死（如 {\"scl\":\"D0\",\"sda\":\"D1\"}）" }
+          "name": {
+            "type": "string",
+            "pattern": "^[^|]*$",
+            "description": "锁实例名（ADR-023）：同源同协议多路并存时区分；缺省 = 协议名。不能包含 '|' 字符（锁键 源|名 的分隔符）"
+          },
+          "params": {
+            "type": "object",
+            "description": "协议参数 + 通道角色钉死（如 {\"scl\":\"D0\",\"sda\":\"D1\"}）"
+          }
         }
       }
     }

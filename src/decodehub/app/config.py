@@ -28,16 +28,21 @@
 
 from __future__ import annotations
 
+import re
 import sys
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..render.format import EXPORT_FORMAT_KEYS
 from ..shared.errors import ConfigError
 from .profile import LockSpec, ProfileSpec, SourceSpec, load_profile
+from .session import (duplicate_lock_key_problems, make_lock_key,
+                      name_constraint_problems, sink_name_conflict_problems)
+from ..decode.bindings import normalize_chain_steps
 
 CONFIG_NAME = "decodehub.toml"
-EXPORT_FORMATS = ("csv", "json", "md")
+EXPORT_FORMATS: tuple[str, ...] = EXPORT_FORMAT_KEYS  # 派生自导出格式注册表（ADR-019）
 _GLOB_CHARS = "*?["
 
 
@@ -59,6 +64,37 @@ class RenderStep:
 
 
 @dataclass
+class PipelineSpec:
+    """管线声明（ADR-020）：tap 上游协议锁的输出 → 通用节点链 → 独立报告 sink。"""
+
+    name: str
+    tap: str | None
+    chain: list[dict] = field(default_factory=list)  # [{type, params}]
+
+
+@dataclass
+class NamingSpec:
+    """产物命名模板（ADR-024）：{占位符} 可选集见 _NAMING_ALLOWED；缺省 = 原行为。"""
+
+    decoded: str = "decoded.json"
+    events: str = ""      # 空 = 缺省智能命名（单报告 events.ext / 多报告带 源-协议）
+    timing: str = ""      # 空 = timing_{n}.png
+    analog: str = ""      # 空 = analog_<通道>_{n}.png
+    index: str = "index.md"
+    summary: str = "summary.json"
+
+
+_NAMING_ALLOWED: dict[str, set[str]] = {
+    "decoded": {"label", "run"},
+    "events": {"source", "protocol", "ext", "label", "run"},
+    "timing": {"source", "protocol", "n", "label", "run"},
+    "analog": {"source", "channel", "n", "label", "run"},
+    "index": {"run"},
+    "summary": {"run"},
+}
+
+
+@dataclass
 class RunSpec:
     name: str
     profile_name: str | None = None      # 引用 profiles_dir 下的档案
@@ -66,6 +102,10 @@ class RunSpec:
     captures: dict[str, str] = field(default_factory=dict)  # 源别名 → 路径/glob
     export: ExportStep | None = None
     render: RenderStep | None = None
+    pipelines: dict[str, PipelineSpec] = field(default_factory=dict)
+    out_dir: str | None = None           # 运行级产物根目录（缺省用 [project] 的）
+    set_dir: str | None = None           # 采集集子目录模板，如 "{label}" 或 "sets/{label}"
+    naming: NamingSpec = field(default_factory=NamingSpec)
 
 
 @dataclass
@@ -206,25 +246,93 @@ def _parse_inline_decode(d: dict, run_name: str, where: str) -> ProfileSpec:
             raise ConfigError(f"{w}: options 必须是表")
         fmt = _get_str(s, "format", w)
         spec.sources.append(SourceSpec(alias=alias, format=fmt, options=dict(opts)))
-    locks = _table(d, "locks", where) or {}
-    for alias, l in locks.items():
-        w = f"{where}.locks.{alias}"
+    # 两种锁写法（语义等价）：
+    #   表形式（每源一把，向后兼容）：[runs.X.decode.locks.la]  protocol/params/name
+    #   数组形式（同源多路/多把锁）：[[runs.X.decode.locks]]   source/protocol/params/name
+    locks_raw = d.get("locks")
+    entries: list[tuple[str, dict, str]] = []  # (source, 锁表, 报错位置)
+    if locks_raw is None:
+        pass
+    elif isinstance(locks_raw, list):
+        for i, l in enumerate(locks_raw):
+            if not isinstance(l, dict) or not isinstance(l.get("source"), str):
+                raise ConfigError(f"{where}.locks[{i}]: 必须是含 source 的表")
+            entries.append((l["source"],
+                            {k: v for k, v in l.items() if k != "source"},
+                            f"{where}.locks[{i}]"))
+    elif isinstance(locks_raw, dict):
+        entries = [(src, l, f"{where}.locks.{src}") for src, l in locks_raw.items()]
+    else:
+        raise ConfigError(f"{where}: locks 必须是表或数组")
+    parsed: list[tuple[LockSpec, str]] = []
+    for src, l, w in entries:
         if not isinstance(l, dict):
             raise ConfigError(f"{w}: 必须是表")
-        _strict_keys(l, {"protocol", "params"}, w)
+        _strict_keys(l, {"protocol", "params", "name"}, w)
         proto = _get_str(l, "protocol", w)
         if not proto:
             raise ConfigError(f"{w}: 缺少 protocol")
         params = l.get("params", {})
         if not isinstance(params, dict):
             raise ConfigError(f"{w}: params 必须是表")
-        spec.locks.append(LockSpec(source=alias, protocol=proto, params=dict(params)))
+        name = _get_str(l, "name", w) or ""
+        probs = name_constraint_problems(name, w)  # Bug 6：实例名不能含 |
+        if probs:
+            raise ConfigError(probs[0])
+        parsed.append((LockSpec(source=src, protocol=proto, params=dict(params),
+                                name=name), w))
+    spec.locks = [lk for lk, _w in parsed]
+    # 锁键查重（Bug 1）：同源同名（缺省名 = 协议名）的锁在声明期就拒绝——
+    # 运行期字典按锁键索引，重复即静默覆盖，违反 ADR-023
+    probs = duplicate_lock_key_problems(
+        (make_lock_key(lk.source, lk.name, lk.protocol), w) for lk, w in parsed)
+    if probs:
+        raise ConfigError(f"{where}: 协议锁声明冲突\n"
+                          + "\n".join(f"- {p}" for p in probs))
     return spec
+
+
+def _parse_pipeline(name: str, d: dict, where: str) -> PipelineSpec:
+    _strict_keys(d, {"tap", "chain"}, where)
+    chain = d.get("chain")
+    if not isinstance(chain, list) or not chain:
+        raise ConfigError(f"{where}: chain 必须是非空节点数组")
+
+    def _err(msg: str) -> None:
+        raise ConfigError(f"{where}.{msg}")
+
+    return PipelineSpec(name=name, tap=_get_str(d, "tap", where),
+                        chain=normalize_chain_steps(chain, _err))
+
+
+def _validate_template(tpl: str, key: str, where: str) -> None:
+    used = set(re.findall(r"{(\w+)}", tpl))
+    unknown = used - _NAMING_ALLOWED[key]
+    if unknown:
+        raise ConfigError(
+            f"{where}.naming.{key}: 未知占位符 {sorted(unknown)}；"
+            f"可用: {sorted(_NAMING_ALLOWED[key])}"
+        )
+
+
+def _parse_naming(d: dict, where: str) -> NamingSpec:
+    _strict_keys(d, set(_NAMING_ALLOWED), where)
+    ns = NamingSpec()
+    for key in _NAMING_ALLOWED:
+        v = d.get(key)
+        if v is None:
+            continue
+        if not isinstance(v, str) or not v.strip():
+            raise ConfigError(f"{where}.naming.{key}: 必须是非空模板字符串")
+        _validate_template(v, key, where)
+        setattr(ns, key, v)
+    return ns
 
 
 def _parse_run(name: str, d: dict) -> RunSpec:
     where = f"runs.{name}"
-    _strict_keys(d, {"profile", "decode", "captures", "export", "render"}, where)
+    _strict_keys(d, {"profile", "decode", "captures", "export", "render", "pipelines",
+                     "out_dir", "set_dir", "naming"}, where)
     profile_name = _get_str(d, "profile", where)
     decode = _table(d, "decode", where)
     if profile_name and decode:
@@ -241,13 +349,40 @@ def _parse_run(name: str, d: dict) -> RunSpec:
 
     export_t = _table(d, "export", where)
     render_t = _table(d, "render", where)
+    pipelines_t = _table(d, "pipelines", where) or {}
+    pipelines = {pname: _parse_pipeline(pname, pd, f"{where}.pipelines.{pname}")
+                 for pname, pd in pipelines_t.items()}
+    naming_t = _table(d, "naming", where)
+    set_dir = _get_str(d, "set_dir", where)
+    if set_dir:
+        used = set(re.findall(r"{(\w+)}", set_dir))
+        if used - {"label", "run"}:
+            raise ConfigError(
+                f"{where}.set_dir: 未知占位符 {sorted(used - {'label', 'run'})}；"
+                f"可用: ['label', 'run']"
+            )
+    inline = _parse_inline_decode(decode, name, f"{where}.decode") if decode else None
+    # 管线名约束 + 管线键与锁键冲突（Bug 2/2b/6）：管线键 = `源|管线名`，
+    # 与锁实例名同名即有覆盖/歧义风险，声明期一律拒绝。
+    # 内联定义的锁在这里一并校验；档案引用的锁由 validate 命令 / run 预检校验。
+    probs = sink_name_conflict_problems(
+        [make_lock_key(lk.source, lk.name, lk.protocol) for lk in inline.locks]
+        if inline else [],
+        [(pname, f"{where}.pipelines.{pname}") for pname in pipelines])
+    if probs:
+        raise ConfigError(f"{where}: 管线名声明冲突\n"
+                          + "\n".join(f"- {p}" for p in probs))
     return RunSpec(
         name=name,
         profile_name=profile_name,
-        inline_spec=_parse_inline_decode(decode, name, f"{where}.decode") if decode else None,
+        inline_spec=inline,
         captures=captures,
         export=_parse_export(export_t, f"{where}.export") if export_t else None,
         render=_parse_render(render_t, f"{where}.render") if render_t else None,
+        pipelines=pipelines,
+        out_dir=_get_str(d, "out_dir", where),
+        set_dir=set_dir,
+        naming=_parse_naming(naming_t, f"{where}.naming") if naming_t else NamingSpec(),
     )
 
 

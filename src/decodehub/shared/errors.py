@@ -4,6 +4,7 @@
 - 摄取/格式:  UnknownFormatError / PlannedFormatError / IngestError
 - 图:         GraphValidationError / NodeError
 - 协议锁定:    ProtocolLockError
+- 字段规格:    FieldSpecError
 - MCP 门禁:    StageGateError
 - 项目配置:    ConfigError（decodehub.toml / 档案 JSON 的解析与校验）
 解码数据错误（坏帧等）不是异常——是事件上的 errors 字段（ADR-004）。
@@ -62,6 +63,10 @@ class NodeError(DecodehubError):
 
 class ProtocolLockError(DecodehubError):
     """lock_protocol 校验失败（通道缺失、参数非法等）。"""
+
+
+class FieldSpecError(DecodehubError):
+    """payload 字段规格编译/查找失败（规格是声明，写错在编译期报）。"""
 
 
 class StageGateError(DecodehubError):

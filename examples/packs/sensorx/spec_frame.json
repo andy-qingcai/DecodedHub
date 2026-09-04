@@ -1,0 +1,13 @@
+{
+  "endian": "be",
+  "doc": "sensorx 传感器帧（示例协议包）：sync + 命令 + 定长载荷 + 自定义校验钩子",
+  "seq": [
+    { "id": "sync", "type": "bytes", "contents": "A5", "doc": "帧头" },
+    { "id": "cmd", "type": "u8",
+      "enum": { "1": "TEMP", "2": "HUM", "3": "BAT" } },
+    { "id": "len", "type": "u8", "display": "dec" },
+    { "id": "payload", "type": "bytes", "size": "len" },
+    { "id": "chk", "type": "u8", "crc": { "fn": "sensorx.sum_xor" },
+      "doc": "自定义校验：代码在 checks.py，规格只带名字" }
+  ]
+}

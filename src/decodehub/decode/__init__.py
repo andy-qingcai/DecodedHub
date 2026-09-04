@@ -12,6 +12,10 @@ from .registry import NODE_REGISTRY, get_registry, node_catalog, register
 from . import nodes as _nodes  # noqa: F401,E402
 from . import protocols as _protocols  # noqa: F401,E402
 
+# fields 呈现在协议族之后注册（ADR-013 CSV 并集列序契约：新族列追加在尾）
+from .fields import register_fields_presentation as _register_fields_presentation
+_register_fields_presentation()
+
 __all__ = [
     "DecodeReport", "DecodedEvent", "I2cEvent", "SpiEvent", "UartEvent",
     "Edge", "Graph", "NodeSpec", "Param", "evaluate", "validate",

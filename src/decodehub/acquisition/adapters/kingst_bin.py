@@ -12,6 +12,7 @@ import numpy as np
 
 from ...shared.errors import IngestError
 from ...shared.waves import Capture, CaptureMeta, DigitalWave
+from .spec import AdapterSpec, OptionField
 
 
 def load(path: str | Path, options: dict | None = None) -> Capture:
@@ -50,3 +51,17 @@ def load(path: str | Path, options: dict | None = None) -> Capture:
         ),
         digital=wave,
     )
+
+
+SPEC = AdapterSpec(
+    key="kingst_bin",
+    description="Kingst VIS 裸二进制（u16 LE 位域流；与 mcu_adc_bin 嗅探不可区分，须显式 format=）",
+    load=load,
+    options=(
+        OptionField("sample_rate", "number",
+                    "采样率 Hz，必填：文件无头。Kingst 常见 200_000_000"
+                    "（kingstvis MCP get-sample-rate 可查）", required=True),
+        OptionField("n_channels", "integer", "通道数（缺省 16，通道名 D0..Dn-1）"),
+        OptionField("device", doc="设备显示名（缺省 Kingst LA）"),
+    ),
+)

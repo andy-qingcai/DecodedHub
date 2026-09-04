@@ -1,0 +1,13 @@
+{
+  "name": "repeat-mcu",
+  "description": "MCU ADC 上的模拟 UART（12bit 码值 + 阈值切片）；IO 与采样率固定的日常重复调试",
+  "version": 1,
+  "sources": [
+    { "alias": "mcu", "format": "mcu_adc_csv",
+      "options": { "vref": 3.3, "bits": 12 } }
+  ],
+  "locks": [
+    { "source": "mcu", "protocol": "uart", "name": "mcu_uart",
+      "params": { "threshold": 1.65, "hysteresis": 0.3, "baud": 115200 } }
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "endian": "le",
+  "doc": "USB 标准配置描述符：头部 9 字节定长，其后是嵌套的接口/端点/类别描述符流（每个自带 bLength，类型决定结构）。",
+  "seq": [
+    { "id": "bLength", "type": "u8", "valid": { "eq": "9" }, "display": "dec",
+      "doc": "配置描述符头部固定 9 字节" },
+    { "id": "bDescriptorType", "type": "u8", "valid": { "eq": "2" },
+      "enum": { "2": "CONFIGURATION" } },
+    { "id": "wTotalLength", "type": "u16", "display": "dec",
+      "doc": "头部 + 全部嵌套描述符的总长度（动态范围的权威值）" },
+    { "id": "bNumInterfaces", "type": "u8", "display": "dec" },
+    { "id": "bConfigurationValue", "type": "u8", "display": "dec",
+      "doc": "SetConfiguration() 的参数值" },
+    { "id": "iConfiguration", "type": "u8", "display": "dec", "doc": "描述字符串索引" },
+    { "id": "attr_reserved", "type": "b1", "valid": { "eq": "1" },
+      "doc": "bmAttributes bit7，必须置 1" },
+    { "id": "self_powered", "type": "b1", "doc": "bmAttributes bit6" },
+    { "id": "remote_wakeup", "type": "b1", "doc": "bmAttributes bit5" },
+    { "id": "attr_rsv", "type": "b5", "doc": "bmAttributes bit4..0 保留" },
+    { "id": "bMaxPower", "type": "u8", "scale": 2, "unit": "mA",
+      "doc": "总线供电上限，单位 2mA（显示时 ×2 换算成 mA）" },
+    { "id": "desc", "type": "sub_desc", "repeat": "eos",
+      "doc": "嵌套子描述符流：每个自带 bLength，类型决定结构，直到载荷结束" }
+  ],
+  "types": {
+    "sub_desc": { "seq": [
+      { "id": "bLength", "type": "u8", "display": "dec",
+        "doc": "本子描述符总长（含 bLength/bType 自身）" },
+      { "id": "bDescriptorType", "type": "u8",
+        "enum": { "4": "INTERFACE", "5": "ENDPOINT", "0x21": "HID", "0x22": "REPORT",
+                  "0x24": "CS_INTERFACE", "0x25": "CS_ENDPOINT" } },
+      { "id": "body", "switch_on": "bDescriptorType",
+        "cases": { "4": "iface_body", "5": "ep_body", "*": "generic_body" },
+        "doc": "类别分发：接口/端点走专用结构，其余（HID 等）走通配" }
+    ] },
+
+    "iface_body": { "seq": [
+      { "id": "bInterfaceNumber", "type": "u8", "display": "dec" },
+      { "id": "bAlternateSetting", "type": "u8", "display": "dec" },
+      { "id": "bNumEndpoints", "type": "u8", "display": "dec" },
+      { "id": "bInterfaceClass", "type": "u8",
+        "enum": { "1": "AUDIO", "2": "CDC", "3": "HID", "6": "MSC", "7": "PHOTO",
+                  "9": "HUB", "0xE0": "WIRELESS", "255": "VENDOR_SPECIFIC" } },
+      { "id": "bInterfaceSubClass", "type": "u8", "enum": { "1": "BOOT" } },
+      { "id": "bInterfaceProtocol", "type": "u8",
+        "enum": { "1": "KEYBOARD", "2": "MOUSE" } },
+      { "id": "iInterface", "type": "u8", "display": "dec" },
+      { "id": "class_specific", "type": "bytes", "size": "parent.bLength - 9",
+        "doc": "标准接口描述符之外的类别扩展（parent. 引用本子描述符的 bLength）" }
+    ] },
+
+    "ep_body": { "seq": [
+      { "id": "ep_dir", "type": "b1", "doc": "bEndpointAddress bit7：0=OUT 1=IN" },
+      { "id": "ep_rsv", "type": "b3", "doc": "bit6..4 保留（复位为 0）" },
+      { "id": "ep_number", "type": "b4", "display": "dec", "doc": "bit3..0 端点号" },
+      { "id": "bmAttributes", "type": "u8",
+        "enum": { "0": "CONTROL", "1": "ISO", "2": "BULK", "3": "INTERRUPT" },
+        "doc": "传输类型在 bit1..0" },
+      { "id": "wMaxPacketSize", "type": "u16", "display": "dec" },
+      { "id": "bInterval", "type": "u8", "display": "dec",
+        "doc": "轮询间隔（帧数/微帧数）" },
+      { "id": "class_specific", "type": "bytes", "size": "parent.bLength - 7" }
+    ] },
+
+    "generic_body": { "seq": [
+      { "id": "raw", "type": "bytes", "size": "parent.bLength - 2",
+        "doc": "未专列的描述符（HID/类别描述符等）按原始字节保留" }
+    ] }
+  }
+}

@@ -15,6 +15,44 @@
 
 延后（v1.5+）：帧级甘特图（帧数 > ~50 时自动）、总线统计图。
 
+## 渲染路由注册表（ADR-019）
+
+`render/routes.py` 的 `ROUTES` 把锁的图形状元数据（`binding.graph_kind_for`，
+ADR-014）翻译为呈现策略；`render_timing` 只做查表分派 + 切片物化 + 输入组装：
+
+| graph_kind | 策略 | 叶子渲染器 | 说明 |
+|---|---|---|---|
+| `digital` | 解码时序 | `timing_plot` | 数字直达源 |
+| `sliced` | 切片时序 | `timing_plot` | 模拟源经图求值物化切片波形（应用层 `_materialize_slice`） |
+| `analog_direct` | 突发时序 | `analog_plot` | 原始波形 + 事件 span（ADR-010） |
+| `fan_in` | 突发时序 | `analog_plot` | 锚点扇入（ADR-011），span 同上 |
+
+新增呈现形态 = plots.py 加叶子渲染器 + ROUTES 登记一行（绑定的
+graph_kind_for 返回新键）——应用层/工具层零改动。路由缺口（新绑定先行、
+路由未跟）由 tests/unit/test_render_registry.py 对全部绑定扫出。
+
+## 协议客制渲染注册表（ADR-022）
+
+协议需要**自身最佳显示**（通用时序图表达不了的形态）时，在
+`render/contrib/<protocol>.py` 自注册 `(protocol, graph_kind) → RenderRoute`
+（复用 ADR-019 数据类）。`render/contrib/__init__.py` 经 pkgutil 发现本目录
+全部模块——**投放一个文件即生效，零共享文件改动**；重复键 import 期抛
+ValueError（多 agent 并行的 fail-fast 防线），分派与注册顺序无关。
+
+`render_timing` 两级分派：客制路由优先 → `ROUTES`（上表）通用兜底 → 未登记
+显式报错。分派族 = 首事件 kind 前缀（管线报告的 protocol 字段是管线名，故
+不可直接用；空报告退 report.protocol）。未登记客制图的协议行为与 ADR-019
+逐字节一致。matplotlib 只住呈现上下文；协议包（decode 侧）不得反向注册
+（ADR-013/019 依赖方向）。
+
+## 导出格式注册表（ADR-019）
+
+`render/format.py` 的 `EXPORT_FORMAT_SPECS` 是导出格式的唯一登记点
+（键、扩展名、导出器、描述同处一处）。以下全部派生，不许手抄第二份：
+`config.EXPORT_FORMATS`（decodehub.toml 合法值）、`export_events` 工具的
+format enum、headless runner 的导出遍历序。新增导出格式 = 登记一个
+`ExportFormatSpec`。
+
 ## 实现规范（matplotlib，Agg）
 
 - `matplotlib.use("Agg")` 于 pyplot 导入前；`plt.close(fig)` 收尾。
@@ -27,7 +65,7 @@
 
 ## 输出与制品约定
 
-- 目录：`out/<capture_id>/`；文件名确定性：`timing_<n>.png`、`analog_<ch>_<n>.png`、`events.json|csv|md`。重复渲染幂等覆盖（文件名无时间戳）。
+- 目录：`out/<capture_id>/`；文件名确定性：`timing_<n>.png`、`analog_<ch>_<n>.png`、`events.json|csv|md`（序号按制品登记表计数，`_next_figure_path` 统一产生）。重复渲染幂等覆盖（文件名无时间戳）。
 - `Artifact` 登记：路径、种类（figure/table/export）、覆盖的时间窗/帧数、像素/字节数。
 - MCP 返回：`[ImageContent(png₁), …, TextContent(制品清单 + Markdown 表)]`——图内联给客户端渲染，路径留给用户复盘/缩放。
 

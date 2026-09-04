@@ -29,12 +29,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..shared.errors import ConfigError, DecodehubError
+from .session import (duplicate_lock_key_problems, make_lock_key,
+                      name_constraint_problems)
 
 PROFILE_VERSION = 1
 
 _TOP_KEYS = {"name", "description", "version", "created", "tool_version", "sources", "locks"}
 _SOURCE_KEYS = {"alias", "format", "options"}
-_LOCK_KEYS = {"source", "protocol", "params"}
+_LOCK_KEYS = {"source", "protocol", "params", "name"}
 
 
 def profiles_dir() -> Path:
@@ -53,6 +55,7 @@ class LockSpec:
     source: str
     protocol: str
     params: dict = field(default_factory=dict)
+    name: str = ""  # 锁实例名（ADR-023）；空 = 用协议名
 
 
 @dataclass
@@ -77,7 +80,8 @@ class ProfileSpec:
                 for s in self.sources
             ],
             "locks": [
-                {"source": l.source, "protocol": l.protocol, "params": l.params}
+                {"source": l.source, "protocol": l.protocol,
+                 **({"name": l.name} if l.name else {}), "params": l.params}
                 for l in self.locks
             ],
         }
@@ -146,6 +150,7 @@ def validate_profile_dict(data: dict, *, known_formats: set[str] | None = None,
     if not isinstance(locks, list):
         problems.append('"locks" 必须是数组')
     else:
+        lock_key_pairs: list[tuple[str, str]] = []
         for i, l in enumerate(locks):
             where = f"locks[{i}]"
             if not isinstance(l, dict):
@@ -166,6 +171,17 @@ def validate_profile_dict(data: dict, *, known_formats: set[str] | None = None,
                 problems.append(f'{where}: 未知协议 {proto!r}；可用: {sorted(known_protocols)}')
             if "params" in l and not isinstance(l["params"], dict):
                 problems.append(f'{where}: "params" 必须是对象')
+            name = l.get("name")
+            if "name" in l and (not isinstance(name, str) or not name.strip()):
+                problems.append(f'{where}: "name" 必须是非空字符串（锁实例名）')
+            elif isinstance(name, str) and name:
+                problems += name_constraint_problems(name, where)  # Bug 6：不能含 |
+            # 锁键查重（Bug 1）：source/protocol 均合法才参与（结构问题已单独报）
+            if isinstance(src, str) and src and isinstance(proto, str) and proto:
+                lock_key_pairs.append(
+                    (make_lock_key(src, name if isinstance(name, str) else "", proto),
+                     where))
+        problems += duplicate_lock_key_problems(lock_key_pairs)
     return problems
 
 
@@ -179,8 +195,11 @@ def save_profile(spec: ProfileSpec, dir: Path | None = None) -> Path:
     d = dir or profiles_dir()
     d.mkdir(parents=True, exist_ok=True)
     path = d / f"{_slug(spec.name)}.json"
-    path.write_text(json.dumps(spec.to_dict(), ensure_ascii=False, indent=2),
-                    encoding="utf-8")
+    # 原子写（tmp+rename）：多人/多 agent 并发保存同名档案时不会读到半截 JSON
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(spec.to_dict(), ensure_ascii=False, indent=2),
+                   encoding="utf-8")
+    os.replace(tmp, path)
     return path
 
 
@@ -217,7 +236,7 @@ def load_profile(name: str, dir: Path | None = None) -> ProfileSpec:
                                 options=s.get("options", {}))
                      for s in data.get("sources", [])],
             locks=[LockSpec(source=l["source"], protocol=l["protocol"],
-                            params=l.get("params", {}))
+                            params=l.get("params", {}), name=l.get("name", ""))
                    for l in data.get("locks", [])],
         )
     except (KeyError, TypeError, ValueError) as e:  # 防御：校验器遗漏的结构问题

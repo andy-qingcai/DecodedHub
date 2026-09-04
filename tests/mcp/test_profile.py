@@ -143,7 +143,7 @@ class TestProfileMcp:
             text = _text(res)
             assert "已打开" in text and "🔒" in text
             tools = await client.list_tools()
-            assert len(tools.tools) == 18  # READY
+            assert len(tools.tools) == 19  # READY（含 bind_pipeline，ADR-020）
             res = await client.call_tool("run_decode", {})
             text = _text(res)
             assert "W 0x51" in text          # I2C 源正常

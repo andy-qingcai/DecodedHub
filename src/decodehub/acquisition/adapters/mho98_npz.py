@@ -11,6 +11,7 @@ import numpy as np
 
 from ...shared.errors import IngestError
 from ...shared.waves import AnalogChannel, Capture, CaptureMeta
+from .spec import AdapterSpec, OptionField
 
 
 def load(path: str | Path, options: dict | None = None) -> Capture:
@@ -41,3 +42,25 @@ def load(path: str | Path, options: dict | None = None) -> Capture:
         extra={"points": int(t.size)},
     )
     return Capture(meta=meta, analog=[ch])
+
+
+def _sniff(ctx) -> bool:
+    if not (ctx.name.endswith(".npz") or ctx.head[:2] == b"PK"):
+        return False
+    try:
+        import numpy as np
+
+        with np.load(ctx.path, allow_pickle=False) as z:
+            return {"t_s", "v_V"} <= set(z.files)
+    except Exception:
+        return False
+
+
+SPEC = AdapterSpec(
+    key="mho98_npz",
+    description="RIGOL MHO98 MCP 导出 NPZ（键 t_s/v_V）",
+    load=load,
+    sniff=_sniff,
+    sniff_hint="npz 键 t_s/v_V",
+    options=(OptionField("name", doc="模拟通道名覆盖（缺省文件名前段）"),),
+)

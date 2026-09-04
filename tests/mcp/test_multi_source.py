@@ -45,11 +45,11 @@ class TestMultiSourceMcp:
             # 各源独立锁不同协议
             res = await client.call_tool("lock_protocol", {
                 "protocol": "i2c", "source": "la"})
-            assert "源 `la`" in _text(res)
+            assert "锁 `la|i2c` 已锁定" in _text(res)
             res = await client.call_tool("lock_protocol", {
                 "protocol": "uart", "source": "probe", "params": {"baud": "auto"}})
-            assert "源 `probe`" in _text(res)
-            assert len((await client.list_tools()).tools) == 18
+            assert "锁 `probe|uart` 已锁定" in _text(res)
+            assert len((await client.list_tools()).tools) == 19
 
             # 多源时缺省 lock_protocol → 引导指定 source
             res = await client.call_tool("lock_protocol", {"protocol": "uart"})

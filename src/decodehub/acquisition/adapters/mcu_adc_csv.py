@@ -14,6 +14,7 @@ import numpy as np
 
 from ...shared.errors import IngestError
 from ...shared.waves import AnalogChannel, Capture, CaptureMeta
+from .spec import ADCISH, TIMEISH, AdapterSpec, OptionField, numeric_cells
 
 _TIME_COL_MS = ("time_ms", "millis", "ms", "elapsed_ms")
 
@@ -98,3 +99,36 @@ def load(path: str | Path, options: dict | None = None) -> Capture:
         extra={"n": int(t.size), "header": header},
     )
     return Capture(meta=meta, analog=[ch])
+
+
+def _sniff(ctx) -> bool:
+    hd = ctx.first_header()
+    if hd is None:
+        return False
+    header, data_lines = hd
+    cells = [c.strip() for c in header.split(",")]
+    if len(cells) >= 2 and TIMEISH.match(cells[0]):
+        return True
+    if len(cells) == 1 and ADCISH.match(cells[0]):
+        return True
+    # 无表头：前几行确为 1–2 列纯数值才认领
+    if numeric_cells(header) and len(header.split(",")) <= 2:
+        if all(numeric_cells(dl) is not None for dl in data_lines[:3]):
+            return True
+    return False
+
+
+SPEC = AdapterSpec(
+    key="mcu_adc_csv",
+    description="MCU ADC 串口记录 CSV（time_ms,adc_raw 等变体）",
+    load=load,
+    sniff=_sniff,
+    sniff_hint="文本头（时间/ADC 列或 1–2 数值列）",
+    options=(
+        OptionField("sample_rate", "number", "采样率 Hz（单列数据、无时间列时必填）"),
+        OptionField("vref", "number", "ADC 参考电压 V（码值→伏特换算，保留 raw_scale 溯源）"),
+        OptionField("bits", "integer", "ADC 位数（配 vref 用，缺省 12）"),
+        OptionField("name", doc="模拟通道名（缺省 adc0）"),
+        OptionField("device", doc="设备显示名（缺省 MCU ADC）"),
+    ),
+)

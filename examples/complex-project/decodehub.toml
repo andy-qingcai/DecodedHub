@@ -1,0 +1,210 @@
+# =====================================================================
+# decodehub.toml —— 多生产者 / 多消费者 展示配置（越复杂越好版）
+#
+# 生产者（4 个采集源、5 条总线）：
+#   la        Kingst LA 8 通道数字 CSV
+#             ├─ UART1（UART1_TX, 115200）     ← 锁实例名 uart1
+#             ├─ UART2（UART2_TX, 9600）       ← 锁实例名 uart2（同源同协议多路）
+#             ├─ I2C（I2C_SCL/I2C_SDA, 400kHz）
+#             ├─ SPI（SPI_CLK/MOSI/CS, mode0）
+#             └─ 采集文件按 rev A/B 批量（glob 两份，逐份解码对比固件版本）
+#   scope_ul  示波器 CH1：上行 DSSS 模拟信号
+#   scope_dl  示波器 CH2：下行 DBPSK（以上行帧网格为锚，uplink_source 扇入）
+#   mcu       MCU ADC 记录的模拟 UART（数字协议走阈值切片，threshold 可配）
+#
+# 消费者（管线链，全部独立报告/导出/渲染）：
+#   8 条管线：按实例名/协议 tap 上游，做帧提取、错误隔离、时间窗切片、
+#   链上链（管线再被管线消费）等。
+#
+# 运行： python make_captures.py && decodehub validate && decodehub run
+# =====================================================================
+
+version = 1
+
+[project]
+name = "mega-board-r3"
+description = "多生产者多消费者展示：LA(4 总线) + 示波器(DSSS/DBPSK) + MCU ADC(UART)"
+profiles_dir = "profiles"
+out_dir = "reports"
+
+# ================================================================
+# 运行一 explore：内联解码定义（全配置单文件，不需要 JSON 档案）
+# 路径与产物命名全部模板化（ADR-024）：
+#   custom_reports/explore/sets/<采集集>/ 下的全部文件按 naming 落位
+# ================================================================
+[runs.explore]
+out_dir = "custom_reports"
+set_dir = "sets/{label}"
+
+[runs.explore.naming]
+decoded = "{run}-{label}-decoded.json"
+events = "exp-{source}-{protocol}.{ext}"
+timing = "pic_{source}_{protocol}.png"
+analog = "wave_{channel}.png"
+index = "INDEX.md"
+summary = "sum.json"
+
+[runs.explore.decode.sources.la]
+format = "kingst_csv"
+# 省略 options = 信任嗅探；显式写 = 意图自文档化
+
+[runs.explore.decode.sources.scope_ul]
+format = "mho98_npz"
+
+[runs.explore.decode.sources.scope_dl]
+format = "mho98_npz"
+
+[runs.explore.decode.sources.mcu]
+format = "mcu_adc_csv"
+[runs.explore.decode.sources.mcu.options]
+vref = 3.3
+bits = 12
+
+# ---- 协议锁：表形式（每源一把）与数组形式（同源多把，带实例名）混用 ----
+
+# LA 上五把锁全部用数组形式（表形式与数组形式不可混用——TOML 键类型限制；
+# 每源只有一把锁且不需要实例名时，也可整体改用表形式 [runs.X.decode.locks.la]）：
+[[runs.explore.decode.locks]]
+source = "la"
+protocol = "i2c"
+params = { scl = "I2C_SCL", sda = "I2C_SDA", stretch_warn_s = 0.0005 }
+
+# LA 上两路 UART（实例名区分——同源同协议多路并存，ADR-023）：
+[[runs.explore.decode.locks]]
+source = "la"
+protocol = "uart"
+name = "uart1"
+params = { rx = "UART1_TX", baud = 115200, data_bits = 8, parity = "N", stop_bits = 1 }
+
+[[runs.explore.decode.locks]]
+source = "la"
+protocol = "uart"
+name = "uart2"
+params = { rx = "UART2_TX", baud = 9600, stop_bits = 2 }
+
+# LA 上 SPI（数组形式继续追加；方向/位序/片选极性全量可配）：
+# 多行参数用子表形式（TOML 行内表不能跨行）；子表附着最近一个 [[locks]]
+[[runs.explore.decode.locks]]
+source = "la"
+protocol = "spi"
+[runs.explore.decode.locks.params]
+clk = "SPI_CLK"
+mosi = "SPI_MOSI"
+cs = "SPI_CS"
+cpol = 0
+cpha = 0
+word_bits = 8
+bit_order = "msb"
+cs_active = "low"
+
+# 示波器：上行 DSSS（协议形状参数全量可配）+ 下行 DBPSK（锚定上行）：
+[[runs.explore.decode.locks]]
+source = "scope_ul"
+protocol = "uplink"
+[runs.explore.decode.locks.params]
+chip_s = 1e-6
+pn_word = 0x3DA60E45
+pn_len = 31
+pream = "001"
+data_bits = 5
+msb_first = true
+
+[[runs.explore.decode.locks]]
+source = "scope_dl"
+protocol = "downlink"
+[runs.explore.decode.locks.params]
+uplink_source = "scope_ul"
+fc_nominal = 263000
+cycles_per_bit = 10
+n_bits = 17
+frame_hz = 60
+
+# MCU ADC 上的 UART：模拟源 → 阈值切片（切片参数就在 params 里）：
+[[runs.explore.decode.locks]]
+source = "mcu"
+protocol = "uart"
+name = "mcu_uart"
+params = { threshold = 1.65, hysteresis = 0.3, baud = 115200 }
+
+# ---- 采集绑定：glob 批量（la 两份 = 两个采集集），单文件别名广播 ----
+[runs.explore.captures]
+la = "captures/la_*.csv"
+scope_ul = "captures/scope_ul.npz"
+scope_dl = "captures/scope_dl.npz"
+mcu = "captures/mcu_uart_a.csv"
+
+# ---- 导出与渲染 ----
+[runs.explore.export]
+formats = ["csv", "md"]
+
+[runs.explore.render]
+timing = true
+analog = true
+max_frames = 40
+dpi = 130
+
+# ---- 消费者：8 条管线（独立报告/导出/渲染）----
+# 同一 la|uart1 的三个消费者——单生产者多消费者：
+[runs.explore.pipelines.uart1_frames]
+tap = "la|uart1"
+chain = [{ type = "event_filter", kinds = ["uart.frame"] }]
+
+[runs.explore.pipelines.uart1_errors]
+tap = "la|uart1"
+chain = [{ type = "event_filter", has_errors = true }]
+
+[runs.explore.pipelines.uart1_head]          # 时间窗切片：只看前 7ms
+tap = "la|uart1"
+chain = [{ type = "event_filter", t_max = 0.007 }]
+
+# 链上链：管线再被管线消费（head 的干净帧再过滤一遍错误）
+[runs.explore.pipelines.uart1_head_clean]
+tap = "uart1_head"
+chain = [{ type = "event_filter", has_errors = false }]
+
+# 其他生产者各自的消费者：
+[runs.explore.pipelines.uart2_frames]
+tap = "la|uart2"
+chain = [{ type = "event_filter", kinds = ["uart.frame"] }]
+
+[runs.explore.pipelines.i2c_transfers]
+tap = "la|i2c"
+chain = [{ type = "event_filter", kinds = ["i2c.transfer"] }]
+
+[runs.explore.pipelines.uplink_frames]
+tap = "scope_ul|uplink"
+chain = [{ type = "event_filter", kinds = ["uplink.frame"] }]
+
+[runs.explore.pipelines.downlink_packets]
+tap = "scope_dl|downlink"
+chain = [{ type = "event_filter", kinds = ["downlink.packet"] }]
+
+# 报文再解析：I2C 传输载荷按字段规格切开（寄存器/值）——
+# spec 内联（六原语，Kaitai 风格）；扁写 { type, 参数平铺 }
+# 规格较长 → 子表形式（spec 附着最后一个 chain 元素）；单行扁写同样合法
+[runs.explore.pipelines.i2c_fields]
+tap = "la|i2c"
+[[runs.explore.pipelines.i2c_fields.chain]]
+type = "field_split"
+kinds = ["i2c.transfer"]
+[runs.explore.pipelines.i2c_fields.chain.spec]
+seq = [ { id = "reg", type = "u8" }, { id = "val", type = "u8" } ]
+
+# UART 逐帧单字节载荷 → 字段视图（同名管线机制，任何 events→events 节点可链）
+[runs.explore.pipelines.uart2_bytes]
+tap = "la|uart2"
+chain = [{ type = "event_filter", kinds = ["uart.frame"] },
+         { type = "field_split", kinds = ["uart.frame"], spec = { seq = [ { id = "byte", type = "u8" } ] } }]
+
+# ================================================================
+# 运行二 repeat：重复调试形态——档案引用（profiles/repeat-mcu.json）
+# 只看 MCU 那路 UART，mcu_*.csv 批量（a/b 两份 → 两个采集集）
+# ================================================================
+[runs.repeat]
+profile = "repeat-mcu"
+[runs.repeat.captures]
+mcu = "captures/mcu_*.csv"
+[runs.repeat.export]
+formats = ["csv"]
+[runs.repeat.render]
+timing = true

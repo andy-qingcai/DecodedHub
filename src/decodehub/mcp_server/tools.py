@@ -16,7 +16,9 @@ from typing import Callable
 
 from ..app import services
 from ..app.session import SessionState, Stage
+from ..acquisition.adapters import options_properties
 from ..decode.registry import node_catalog
+from ..render.format import EXPORT_FORMAT_KEYS
 from ..render.format import events_markdown
 
 _STAGE_RANK = {Stage.DISCOVERY: 0, Stage.SOURCE_LOCKED: 1, Stage.READY: 2}
@@ -102,9 +104,9 @@ def _describe_capture(args, state):
 
 def _lock_protocol(args, state):
     plan, _g = services.lock_protocol(state, args["protocol"], args.get("params"),
-                                      args.get("source"))
+                                      args.get("source"), name=args.get("name"))
     return [plan + "\n\n🔓 已解锁新工具: run_decode, get_events, export_events, "
-            "render_timing, render_analog, inspect_graph"]
+            "render_timing, render_analog, inspect_graph, bind_pipeline"]
 
 
 def _unlock_protocol(args, state):
@@ -117,6 +119,13 @@ def _run_decode(args, state):
 
 def _redecode(args, state):
     return [services.run_decode(state, args.get("params") or {}, args.get("source"))]
+
+
+def _bind_pipeline(args, state):
+    return [services.bind_pipeline(state, args["name"], args.get("tap"),
+                                   args.get("chain") or [])
+            + "\n\n管线报告与上游协议各自独立：get_events / export_events / "
+            "render_timing 用 protocol=管线名 选择。"]
 
 
 def _get_events(args, state):
@@ -172,7 +181,7 @@ class ToolSpec:
 
 _P = {"type": "object", "properties": {}, "required": []}
 _SRC = {"type": "string", "description": "源别名（多源必填；唯一源可省）"}
-_PRO = {"type": "string", "description": "协议消歧（一源多协议锁时，如 uart/uplink/downlink）", "enum": ["uart", "i2c", "spi", "uplink", "downlink"]}
+_PRO = {"type": "string", "description": "协议或锁实例名消歧（一源多锁时必填，如 uart / uart1；实例名见 get_session 的锁键 源|名）"}
 
 TOOLS: list[ToolSpec] = [
     ToolSpec(
@@ -187,9 +196,11 @@ TOOLS: list[ToolSpec] = [
          "properties": {
              "path": {"type": "string", "description": "采集文件绝对路径"},
              "format": {"type": "string", "description": "格式键（可选，默认自动嗅探）"},
-             "options": {"type": "object", "description":
-                         "可选: alias(源别名), sample_rate(Hz，kingst_bin/mcu_adc 必填), "
-                         "vref/bits(mcu_adc 码值换算), device, name, n_channels"},
+             "options": {"type": "object",
+                         "properties": options_properties(),
+                         "description":
+                             "格式相关选项（必填项标注与每格式明细见 list_capabilities）；"
+                             "alias=源别名"},
          },
          "required": ["path"]},
         _lock_source),
@@ -231,8 +242,11 @@ TOOLS: list[ToolSpec] = [
          "properties": {
              "path": {"type": "string", "description": "采集文件绝对路径"},
              "format": {"type": "string", "description": "格式键（默认自动嗅探）"},
-             "options": {"type": "object", "description":
-                         "alias(源别名), sample_rate, vref/bits, device, name…"},
+             "options": {"type": "object",
+                         "properties": options_properties(),
+                         "description":
+                             "格式相关选项（必填项标注与每格式明细见 list_capabilities）；"
+                             "alias=源别名"},
          },
          "required": ["path"]},
         _add_source),
@@ -248,6 +262,10 @@ TOOLS: list[ToolSpec] = [
              "params": {"type": "object", "description":
                         "如 {\"baud\":115200} / {\"scl\":\"D0\",\"sda\":\"D1\"} / "
                         "{\"cpol\":1,\"cpha\":1} / 模拟源: {\"threshold\":1.65}"},
+             "name": {"type": "string",
+                      "description": "锁实例名（ADR-023）：同源同协议多路并存时区分，"
+                                     "如两路 uart 各钉不同通道 → uart1/uart2；缺省 = 协议名；"
+                                     "不能包含 '|' 字符（锁键分隔符）"},
          },
          "required": ["protocol"]},
         _lock_protocol),
@@ -291,10 +309,11 @@ TOOLS: list[ToolSpec] = [
          "required": []},
         _get_events),
     ToolSpec(
-        "export_events", "导出事件到文件（format: json/csv/md；source 选择源）。",
+        "export_events",
+        f"导出事件到文件（format: {'/'.join(EXPORT_FORMAT_KEYS)}；source 选择源）。",
         Stage.READY,
         {"type": "object",
-         "properties": {"format": {"type": "string", "enum": ["json", "csv", "md"]},
+         "properties": {"format": {"type": "string", "enum": list(EXPORT_FORMAT_KEYS)},
                         "path": {"type": "string"}, "source": _SRC, "protocol": _PRO},
          "required": []},
         _export_events),
@@ -330,6 +349,30 @@ TOOLS: list[ToolSpec] = [
          "properties": {"params": {"type": "object"}, "source": _SRC, "protocol": _PRO},
          "required": []},
         _redecode),
+    ToolSpec(
+        "bind_pipeline",
+        "绑定管线（ADR-019）：tap 某协议锁的输出（如 uart 解码出的事件），串一条"
+        "通用节点链（event_filter / field_split 等）成独立报告 sink——与上游协议"
+        "分开查询/导出/渲染。管线本身可再被 tap（链上链）。",
+        Stage.READY,
+        {"type": "object",
+         "properties": {
+             "name": {"type": "string",
+                      "description": "管线名（报告键 = 源|管线名）；不能包含 '|' 字符，"
+                                     "且不得与任何锁实例名同名（会覆盖其报告）"},
+             "tap": {"type": "string",
+                     "description": "上游锁：源|协议 键（唯一锁/唯一协议名/唯一源时可省）"},
+             "chain": {"type": "array",
+                       "description": "节点链（单输入节点）。每步 = type + 参数平铺，如 "
+                                      "{\"type\":\"event_filter\",\"kinds\":[\"uart.frame\"]}；"
+                                      "也可嵌套 {\"type\":…,\"params\":{…}}（等价）",
+                       "items": {"type": "object",
+                                 "properties": {"type": {"type": "string"},
+                                                "params": {"type": "object"}},
+                                 "required": ["type"]}},
+         },
+         "required": ["name", "chain"]},
+        _bind_pipeline),
 ]
 
 TOOLS_BY_NAME = {t.name: t for t in TOOLS}

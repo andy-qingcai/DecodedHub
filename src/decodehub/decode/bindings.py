@@ -65,6 +65,8 @@ class ProtocolBinding:
     analog_direct: bool = False
     precond_node_type: str | None = None
     requires_sync: str | None = None
+    # 以下三个白名单字段已退役（ADR-021）：参数路由派生自 Node.PARAMS 单一权威，
+    # 字段仅为既有注册兼容保留，引擎不再读取——新参数直接加在节点 PARAMS 即可配置。
     decoder_params: tuple[str, ...] = ()
     precond_params: tuple[str, ...] = ()
     slicer_params: tuple[str, ...] = ("threshold", "hysteresis")
@@ -181,7 +183,20 @@ def auto_map_channels(chs: list[str], binding: ProtocolBinding, overrides: dict)
 # -------------------------------------------------------------- 图模板构建 ---
 
 def _filter_params(tool_params: dict, whitelist: tuple[str, ...]) -> dict:
+    """已退役（ADR-021）：仅存兼容。请用 `node_routed_params`。"""
     return {k: tool_params[k] for k in whitelist if k in tool_params}
+
+
+def node_routed_params(registry: Mapping[str, type], node_type: str,
+                       tool_params: dict, *, exclude: Mapping[str, str] | set = ()) -> dict:
+    """tool_params ∩ Node.PARAMS —— 参数路由的单一权威（ADR-021）。
+
+    节点 PARAMS 里声明的键即可配置，未声明的键不进节点（lock_protocol 会
+    对剩余未知键报错）。exclude = 角色占用的节点参数名（由 channel_map 填充）。
+    """
+    exclude_keys = set(exclude)
+    return {k: v for k, v in tool_params.items()
+            if k in registry[node_type].PARAMS and k not in exclude_keys}
 
 
 def _role_params(binding: ProtocolBinding, channel_map: dict) -> dict:
@@ -189,13 +204,45 @@ def _role_params(binding: ProtocolBinding, channel_map: dict) -> dict:
             for r in binding.roles if r in channel_map}
 
 
-def clone_anchor_graph(anchor_graph: Graph) -> tuple[list, list]:
-    """锚子图节点声明（加 UL_PREFIX 前缀）：[(新id, (type, params)), …] + 边。"""
-    nodes = [(f"{UL_PREFIX}{nid}", spec.type, dict(spec.params))
-             for nid, spec in anchor_graph.nodes.items()]
-    edges = [(f"{UL_PREFIX}{e.src}", e.src_port, f"{UL_PREFIX}{e.dst}", e.dst_port)
-             for e in anchor_graph.edges]
+def clone_graph(graph: Graph, prefix: str) -> tuple[list, list]:
+    """子图克隆（加前缀）：[(新id, type, params), …] + 边——锚扇入/管线 tap 共用。"""
+    nodes = [(f"{prefix}{nid}", spec.type, dict(spec.params))
+             for nid, spec in graph.nodes.items()]
+    edges = [(f"{prefix}{e.src}", e.src_port, f"{prefix}{e.dst}", e.dst_port)
+             for e in graph.edges]
     return nodes, edges
+
+
+def clone_anchor_graph(anchor_graph: Graph) -> tuple[list, list]:
+    """锚子图克隆（ADR-011 扇入）——clone_graph 的锚定语义别名。"""
+    return clone_graph(anchor_graph, UL_PREFIX)
+
+
+def normalize_chain_steps(chain: list, err) -> list[dict]:
+    """管线链步骤归一（ADR-020）：每步归一为 {type, params}。
+
+    两种写法语义等价、可混用：
+    - 扁写（推荐）：{"type": "event_filter", "kinds": ["uart.frame"]}
+    - 嵌套：{"type": "event_filter", "params": {"kinds": ["uart.frame"]}}
+    扁写时除 type 外的键即节点参数；显式 params 表与扁写混用报错。
+    err(msg) 由调用方注入（ProtocolLockError/ConfigError），消息自带 chain[i] 前缀。
+    """
+    out: list[dict] = []
+    for i, step in enumerate(chain):
+        w = f"chain[{i}]"
+        if not isinstance(step, dict) or not isinstance(step.get("type"), str):
+            err(f"{w}: 必须是含 type 的表")
+        if "params" in step:
+            extra = set(step) - {"type", "params"}
+            if extra:
+                err(f"{w}: params 表与扁写参数混用（多余键 {sorted(extra)}）")
+            if not isinstance(step["params"], dict):
+                err(f"{w}: params 必须是表")
+            params = dict(step["params"])
+        else:
+            params = {k: v for k, v in step.items() if k != "type"}
+        out.append({"type": step["type"], "params": params})
+    return out
 
 
 def strip_anchor_prefix(graph: Graph) -> Graph:
@@ -228,7 +275,10 @@ def build_lock_graph(
     """
     g = Graph()
     input_nodes: dict[str, str] = {}
-    decode_params = {**_filter_params(tool_params, binding.decoder_params),
+    reg = get_registry()
+    role_keys = set(binding.role_param.values())
+    decode_params = {**node_routed_params(reg, binding.node_type, tool_params,
+                                          exclude=role_keys),
                      **_role_params(binding, channel_map)}
 
     if anchor_graph is not None:
@@ -260,7 +310,8 @@ def build_lock_graph(
         g.add_node("apick", "analog_pick")
         upstream = "apick"
         if binding.precond_node_type:
-            pre_params = {**_filter_params(tool_params, binding.precond_params),
+            pre_params = {**node_routed_params(reg, binding.precond_node_type,
+                                               tool_params, exclude=role_keys),
                           **_role_params(binding, channel_map)}
             g.add_node(binding.precond_node_type, binding.precond_node_type, **pre_params)
             g.add_edge(upstream, "out", binding.precond_node_type, "in")
@@ -279,7 +330,7 @@ def build_lock_graph(
 
     # 模拟源上的数字协议：显式切片（ADR-002——模拟→数字唯一合法路径）
     g.add_node("apick", "analog_pick")
-    g.add_node("slice", "slicer", **_filter_params(tool_params, binding.slicer_params))
+    g.add_node("slice", "slicer", **node_routed_params(reg, "slicer", tool_params))
     g.add_node(binding.node_type, binding.node_type, **decode_params)
     g.add_edge("apick", "out", "slice", "in")
     g.add_edge("slice", "out", binding.node_type, "in")

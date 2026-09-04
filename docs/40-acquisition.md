@@ -22,17 +22,39 @@
 
 ## 嗅探规则（有序，全部失败才报 `UnknownFormatError`，消息列出尝试过的规则）
 
-1. `.sal` 或 zip 魔数 `PK\x03\x04` → v1 明确报"规划中"错误（诚实优于半解析）。
+> ADR-018 起，规则以各格式 `AdapterSpec.sniff` 匹配器的形式随适配器登记
+> （`adapters/<fmt>.py`），本表描述判定语义与优先序；遍历器在 `sniff.py`。
+
+1. `.sal` 或 zip 魔数 `PK\x03\x04`（且 zip 内含 `meta.json`）→ v1 明确报"规划中"错误（诚实优于半解析）。
 2. 前 8KB 内（跳过可选 XML 前导）出现 `kvdat\x00\x00\x00` → `kingst_kvdat`。
-3. 扩展名 `.bin`/未知 + 前 8 字节 `<SALEAE>` → v1 报"规划中"（数字 bin v0/v1 与模拟 bin 规格已备档于 ADR-007，暂不实现）。
+3. 前 8 字节 `<SALEAE>` → v1 报"规划中"（数字 bin v0/v1 与模拟 bin 规格已备档于 ADR-007，暂不实现）。
 4. `.npz` 且键 ⊇ {`t_s`,`v_V`} → `mho98_npz`。
 5. 文本嗅探（前 3 行，容忍 BOM）：
    - 行1 以 `# MHO98 waveform` 开头 → `mho98_csv`；
+   - 表头以 `Time[s],` 开头（", " 分隔）→ `kingst_csv`；
    - 表头以 `Time [s],` 开头 → `saleae_csv`；
-   - 表头以 `Time[s],` 开头 → `kingst_csv`；
+   - 表头 `name,…,start_time,…` → v1 报"规划中"（`saleae_data_table`）；
    - 表头匹配 `(?i)^(t(ime)?_?(ms|s)?|millis)\s*,` 或单/双数值列 → `mcu_adc_csv`；
    - 表头含 `x`/`t` 列 + `CH\d|ch\d|volt` 列 → `generic_csv`。
 6. 二进制、大小为偶、无其他命中 → `mcu_adc_bin`（需采样率参数；无参数则报错并提示）。
+
+`kingst_bin` 与 `mcu_adc_bin` 同为裸 u16 流、嗅探不可区分——前者不设匹配器，
+只能显式 `format="kingst_bin"`；兜底命中一律按 `mcu_adc_bin` 处理。
+
+## 登记契约（ADR-018）
+
+格式知识的单一登记点 = `adapters/__init__.py` 的 `SPECS`（插入序即嗅探优先序）。
+**新增一个格式的全部动作**：
+
+1. 写 `adapters/<fmt>.py`：`load(path, options) -> Capture` + `SPEC = AdapterSpec(...)`
+   （嗅探匹配器、`sniff_hint` 诊断串、`options` 声明、目录描述一句话同处一处）；
+2. `SPECS` 元组登记一行（位置 = 嗅探优先级）。
+
+以下全部**派生**自 SPECS，不许再手写第二份：`SUPPORTED_FORMATS` / `PLANNED_FORMATS`、
+capabilities 的每格式选项明细（`options_line`）、MCP lock_source/add_source 的
+options JSON schema（`options_properties`）、required 选项的解析前校验
+（`validate_options`）。一致性由 tests/unit/test_adapter_registry.py 守护
+（登记完整性、派生覆盖、必填前置报错）。
 
 ## 统一模型字段（C1 `shared/waves.py`，权威定义）
 

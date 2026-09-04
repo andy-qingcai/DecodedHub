@@ -26,14 +26,20 @@ def _ev(kind, label, **kw):
     return DecodedEvent(**base)
 
 
-def test_five_protocols_registered_on_import():
-    """导入 decode 包即完成注册（同 registry 先例）；族前缀匹配。"""
-    assert [p.protocol for p in ps.all_presentations()] == \
-        ["uart", "i2c", "spi", "uplink", "downlink"]  # 注册顺序稳定（CSV 并集列序依赖）
+def test_protocol_presentations_registered_on_import():
+    """导入 decode 包即完成注册（同 registry 先例）；族前缀匹配。
+
+    注册顺序稳定（CSV 并集列序依赖）：协议族在前，fields（ADR-016）追加在尾。
+    """
+    # 相对断言（多 agent 并行防语义冲突）：既有协议族列序冻结，fields 恒在尾
+    protos = [p.protocol for p in ps.all_presentations()]
+    assert protos[:-1] == ["uart", "i2c", "spi", "uplink", "downlink"]
+    assert protos[-1] == "fields"
     for kind, proto in [("uart.frame", "uart"), ("uart.warn", "uart"),
                         ("i2c.transfer", "i2c"), ("i2c.addr", "i2c"),
                         ("spi.word", "spi"), ("uplink.frame", "uplink"),
-                        ("downlink.packet", "downlink"), ("downlink.warn", "downlink")]:
+                        ("downlink.packet", "downlink"), ("downlink.warn", "downlink"),
+                        ("fields.split", "fields")]:
         assert presentation_of(kind).protocol == proto
     assert presentation_of("nosuch.kind") is None
 
@@ -60,16 +66,18 @@ def test_markdown_registered_and_fallback():
 
 
 def test_csv_header_union_matches_current_order():
-    """并集列序 = 注册序先到先得：既有 17 列序不变，下行新列追加在尾。"""
-    assert _csv_union_columns() == ["value_or_address", "read", "data_bytes", "acks",
-                                    "mosi", "miso", "word_bits", "pream_ok", "confidence",
-                                    "fc_hz", "slot", "frame"]
+    """并集列序 = 注册序先到先得：既有列序不变，下行新列与 fields 列（ADR-016）追加在尾。"""
+    cols = _csv_union_columns()
+    assert cols[:12] == ["value_or_address", "read", "data_bytes", "acks",
+                         "mosi", "miso", "word_bits", "pream_ok", "confidence",
+                         "fc_hz", "slot", "frame"]
+    assert cols[-3:] == ["fields", "source_kind", "spec"]  # fields 三列恒在尾
     header = report_csv_rows(DecodeReport(protocol="x", params={}, events=[]))
-    assert header.splitlines()[0] == (
+    assert header.splitlines()[0].startswith(
         "idx,t_start,t_end,duration_s,kind,label,ann_class,errors,"
         "value_or_address,read,data_bytes,acks,mosi,miso,word_bits,"
-        "pream_ok,confidence,fc_hz,slot,frame"
-    )
+        "pream_ok,confidence,fc_hz,slot,frame,")
+    assert header.splitlines()[0].endswith(",fields,source_kind,spec")
 
 
 def test_csv_rows_fill_only_own_protocol_columns():
@@ -81,18 +89,21 @@ def test_csv_rows_fill_only_own_protocol_columns():
     ])
     rows = report_csv_rows(rep).strip().splitlines()
     assert len(rows) == 4
+    n_cols = len(rows[0].split(","))  # 相对断言基准 = 实际表头列数
     uart = rows[1].split(",")
-    assert uart[8] == "65" and uart[9:] == [""] * 11
+    assert uart[8] == "65" and uart[9:] == [""] * (n_cols - 9)
     i2c = rows[2].split(",")
     assert i2c[8] == "81" and i2c[9] == "False" and i2c[10] == "12 34" and i2c[11] == "AN"
-    assert i2c[12:] == [""] * 8
-    assert rows[3].split(",")[8:] == [""] * 12  # 未注册 kind：协议列全空
+    assert i2c[12:] == [""] * (n_cols - 12)
+    assert rows[3].split(",")[8:] == [""] * (n_cols - 8)  # 未注册 kind：协议列全空
 
 
 def test_all_preview_kinds_union_contains_downlink():
-    assert all_preview_kinds() == ("uart.frame", "i2c.transfer", "i2c.addr",
-                                   "spi.transfer", "spi.word", "uplink.frame",
-                                   "downlink.packet")
+    kinds = all_preview_kinds()
+    assert kinds[:-1] == ("uart.frame", "i2c.transfer", "i2c.addr",
+                          "spi.transfer", "spi.word", "uplink.frame",
+                          "downlink.packet")
+    assert kinds[-1] == "fields.split"
 
 
 def test_default_detail_is_label():

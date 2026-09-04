@@ -20,6 +20,7 @@ import numpy as np
 
 from ...shared.errors import IngestError
 from ...shared.waves import Capture, CaptureMeta, DigitalWave
+from .spec import AdapterSpec, OptionField
 
 _MAGIC = b"kvdat\x00\x00\x00"
 _CH_STRUCT = struct.Struct("<IBBHQ")  # magic, ch_index, initial, res, record_count
@@ -92,3 +93,17 @@ def load(path: str | Path, options: dict | None = None) -> Capture:
         return Capture(meta=meta, digital=wave)
     except struct.error as e:
         raise IngestError(f"{path}: kvdat 结构解析越界: {e}") from e
+
+
+def _sniff(ctx) -> bool:
+    return _MAGIC in ctx.head
+
+
+SPEC = AdapterSpec(
+    key="kingst_kvdat",
+    description="Kingst VIS 工程文件（自描述：率/深度/初始电平）",
+    load=load,
+    sniff=_sniff,
+    sniff_hint="kvdat 魔数",
+    options=(OptionField("device", doc="设备显示名（缺省 Kingst LA）"),),
+)

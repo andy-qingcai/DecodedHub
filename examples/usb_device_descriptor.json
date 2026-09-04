@@ -1,0 +1,30 @@
+{
+  "endian": "le",
+  "doc": "USB 标准设备描述符（18 字节，USB 2.0 spec §9.6.1）。USB 全线小端。",
+  "seq": [
+    { "id": "bLength", "type": "u8", "valid": { "eq": "18" }, "display": "dec",
+      "doc": "描述符总长度（含自身），设备描述符固定 18" },
+    { "id": "bDescriptorType", "type": "u8", "valid": { "eq": "1" },
+      "enum": { "1": "DEVICE", "2": "CONFIGURATION", "3": "STRING", "4": "INTERFACE",
+                "5": "ENDPOINT", "0x21": "HID", "0x22": "REPORT" },
+      "doc": "描述符类型，设备描述符必须为 1" },
+    { "id": "bcdUSB", "type": "u16", "display": "bcd",
+      "doc": "USB 规范版本 BCD：0x0200=2.00, 0x0210=2.10, 0x0300=3.00" },
+    { "id": "bDeviceClass", "type": "u8",
+      "enum": { "0": "PER_INTERFACE", "2": "CDC", "3": "HID", "9": "HUB",
+                "0xE0": "WIRELESS", "0xEF": "MISC", "255": "VENDOR_SPECIFIC" },
+      "doc": "类代码（0 = 类在接口级描述）" },
+    { "id": "bDeviceSubClass", "type": "u8", "doc": "子类代码" },
+    { "id": "bDeviceProtocol", "type": "u8", "doc": "协议代码" },
+    { "id": "bMaxPacketSize0", "type": "u8",
+      "enum": { "8": "8B", "16": "16B", "32": "32B", "64": "64B" },
+      "doc": "端点 0 最大包长（仅 8/16/32/64 合法）" },
+    { "id": "idVendor", "type": "u16", "doc": "VID（USB-IF 分配）" },
+    { "id": "idProduct", "type": "u16", "doc": "PID（厂商自定）" },
+    { "id": "bcdDevice", "type": "u16", "display": "bcd", "doc": "设备发行版本 BCD" },
+    { "id": "iManufacturer", "type": "u8", "display": "dec", "doc": "厂商字符串索引（0 = 无）" },
+    { "id": "iProduct", "type": "u8", "display": "dec", "doc": "产品字符串索引" },
+    { "id": "iSerialNumber", "type": "u8", "display": "dec", "doc": "序列号字符串索引" },
+    { "id": "bNumConfigurations", "type": "u8", "display": "dec", "doc": "配置描述符个数" }
+  ]
+}

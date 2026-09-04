@@ -8,6 +8,7 @@ import numpy as np
 
 from ...shared.errors import IngestError
 from ...shared.waves import AnalogChannel, Capture, CaptureMeta
+from .spec import AdapterSpec, OptionField
 
 
 def load(path: str | Path, options: dict | None = None) -> Capture:
@@ -44,3 +45,23 @@ def load(path: str | Path, options: dict | None = None) -> Capture:
         extra={"n": int(raw.size)},
     )
     return Capture(meta=meta, analog=[ch])
+
+
+def _sniff(ctx) -> bool:
+    return not ctx.textual and ctx.size % 2 == 0 and ctx.size >= 2
+
+
+SPEC = AdapterSpec(
+    key="mcu_adc_bin",
+    description="MCU ADC 裸二进制（u16 LE 采样 dump；偶数大小兜底嗅探）",
+    load=load,
+    sniff=_sniff,
+    sniff_hint="偶数大小裸二进制",
+    options=(
+        OptionField("sample_rate", "number", "采样率 Hz，必填：裸二进制不含时间信息", required=True),
+        OptionField("vref", "number", "ADC 参考电压 V（码值→伏特换算，保留 raw_scale 溯源）"),
+        OptionField("bits", "integer", "ADC 位数（配 vref 用，缺省 12）"),
+        OptionField("name", doc="模拟通道名（缺省文件名）"),
+        OptionField("device", doc="设备显示名（缺省 MCU ADC）"),
+    ),
+)

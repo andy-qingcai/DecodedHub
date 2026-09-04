@@ -9,9 +9,9 @@ htmlcov/
 dist/
 build/
 
-# 平台产物（运行时生成，不入库）
-out/
-profiles/
+# 平台产物（运行时生成，不入库；锚定仓库根——子项目的 profiles/out 允许入库）
+/out/
+/profiles/
 
 # OS / 编辑器
 .DS_Store
