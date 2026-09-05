@@ -61,12 +61,12 @@
 `tests/data/external/` 保存 UART、I2C、SPI、I3C、AVSBus 的真实或来源明确的
 回归资产；逐文件来源、许可证、SHA-256、通道/参数和预期语义见
 [`test-assets.md`](test-assets.md)。Sigrok `.sr` 覆盖 metadata/probe/rate、
-多段 logic 拼接及 UART/I2C/SPI 离线解码；I3C 同一来源同时保留 CSV 与 `.sr`
-并锚定 DAA/HDR 事件；AVSBus 使用确定性公开协议向量 CSV。
+多段 logic 拼接及 UART/I2C/SPI 离线解码；I3C 与 AVSBus 使用确定性的
+MIT 生成向量 CSV。
 
-无明确再分发条款的三个社区 KVDAT 不入 Git。若其合法本地副本位于相邻
-`decodehub-code-e127559/tests/data/external/`，测试自动执行 KingstVIS 3.6.x
-解析和保存 SPI 设置端到端断言；缺失时只跳过这两项，不伪造测试数据。
+无明确再分发条款的三个社区 KVDAT 不入 Git。将其合法本地副本目录写入
+`DECODEHUB_KVDAT_FIXTURES` 后，测试会执行 KingstVIS 3.6.x 解析和保存 SPI
+设置端到端断言；缺失时明确跳过相关用例，不伪造测试数据。
 
 ## MCP 冒烟断言
 
@@ -96,4 +96,3 @@
 
 - 回归门槛：`pytest tests/` 全过 + `scripts/stdio_smoke.py` 进程级冒烟；app/mcp_server 以冒烟路径覆盖为主。
 - 所有公共 dataclass 字段在文档（40/41）与代码间保持同名——文档漂移作为 review 检查项。
-- 下游特性逐提交测试和最终门禁结果见 [`integration-test-summary.md`](integration-test-summary.md)。

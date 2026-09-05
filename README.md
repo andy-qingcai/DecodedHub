@@ -168,8 +168,7 @@ src/decodehub/
 - 详见 [docs/30-architecture.md 扩展指南](docs/30-architecture.md)。
 
 可再分发的真实波形、来源/许可证/SHA-256 和预期结果见
-[测试资产清单](docs/test-assets.md)；本次下游集成的逐项测试证据见
-[集成测试概要](docs/integration-test-summary.md)。
+[测试资产清单](docs/test-assets.md)。
 
 ## 已知边界（ADR-007）
 
