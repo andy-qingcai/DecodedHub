@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import struct
 from pathlib import Path
 
@@ -47,15 +48,15 @@ def _settings() -> str:
 
 
 def _real_fixture(filename: str) -> Path:
-    root = Path(__file__).resolve().parents[3]
-    candidates = (
-        root / "decodehub-code-e127559" / "tests" / "data" / "external" / filename,
-        root / "third_part" / "tests" / "data" / "external" / filename,
-    )
-    for path in candidates:
+    fixture_dir = os.environ.get("DECODEHUB_KVDAT_FIXTURES")
+    if fixture_dir:
+        path = Path(fixture_dir) / filename
         if path.is_file():
             return path
-    pytest.skip(f"optional unredistributed KVDAT fixture absent: {filename}")
+    pytest.skip(
+        f"optional unredistributed KVDAT fixture absent: {filename}; "
+        "set DECODEHUB_KVDAT_FIXTURES"
+    )
 
 
 def test_sparse_physical_channels_restore_xml_and_saved_spi(tmp_path: Path) -> None:
