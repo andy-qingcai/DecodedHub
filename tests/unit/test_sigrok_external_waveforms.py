@@ -6,6 +6,7 @@ import zipfile
 import pytest
 
 from decodehub.acquisition.service import load_capture
+from decodehub.decode.protocols.avsbus.decode import AvsBusDecodeNode
 from decodehub.decode.protocols.i2c.decode import I2cDecodeNode
 from decodehub.decode.protocols.spi.decode import SpiDecodeNode
 from decodehub.decode.protocols.uart.decode import UartDecodeNode
@@ -60,6 +61,22 @@ def test_sigrok_multichunk_session_is_concatenated() -> None:
 
     assert capture.digital.n_samples == 5_000_000
     assert capture.digital.channels == ("MISO", "CS#", "MOSI", "CLK")
+
+
+def test_avsbus_csv_fixture_decodes_frame_and_crc() -> None:
+    capture = load_capture(
+        ROOT / "avsbus" / "avsbus_smoke.csv",
+        format_key="kingst_csv",
+        options={"sample_rate": 1_000_000},
+    )
+
+    events = AvsBusDecodeNode().run(
+        {"in": capture.digital}, _params(AvsBusDecodeNode)
+    )["out"]
+    frames = [event for event in events if event.kind == "avsbus.frame"]
+    assert len(frames) == 1
+    assert frames[0].cmd_data == 0x1234
+    assert frames[0].main_crc_ok and frames[0].response_crc_ok
 
 
 def test_sigrok_empty_logic_is_an_ingest_error(tmp_path: Path) -> None:
