@@ -38,6 +38,8 @@
 | S6 | 词长 1–32 bit × MSB/LSB | 零误差 |
 | S7 | 缺 CS / 缺 MISO | 降级模式 + WARN |
 | S8 | 词中 CS 翻转 | cs-midword WARN + 词复位 |
+| C1–C6 | I3C SDR、legacy I2C、奇校验/T-bit、CCC、DAA、HDR/ambiguity | 语义正确；不支持模式明确事件化；坏帧可恢复 |
+| A1–A5 | AVSBus controller/target、命令字段、CRC-3、状态、截断/重同步 | 32-clock 帧语义与参考 CRC 一致；错误不中断后续帧 |
 | E1 | 采集尾截断 | truncated 事件 + 前序完整 |
 | G1 | 图级：环/类型失配/缺输入/未知参数 | 构建期拒绝（异常消息含规则名） |
 
@@ -53,6 +55,18 @@
 | `uplink24ms_ch1.npz` / `ch2.npz` | rigol mho98 真实采集 | 上行黄金（0x01）+ 下行静默诚实拒绝 |
 
 （mcu_adc / saleae 等其余样本由各测试以 tmp_path 自造，不入库。）
+
+## 外部可再分发波形
+
+`tests/data/external/` 保存 UART、I2C、SPI、I3C、AVSBus 的真实或来源明确的
+回归资产；逐文件来源、许可证、SHA-256、通道/参数和预期语义见
+[`test-assets.md`](test-assets.md)。Sigrok `.sr` 覆盖 metadata/probe/rate、
+多段 logic 拼接及 UART/I2C/SPI 离线解码；I3C 与 AVSBus 使用确定性的
+MIT 生成向量 CSV。
+
+无明确再分发条款的三个社区 KVDAT 不入 Git。将其合法本地副本目录写入
+`DECODEHUB_KVDAT_FIXTURES` 后，测试会执行 KingstVIS 3.6.x 解析和保存 SPI
+设置端到端断言；缺失时明确跳过相关用例，不伪造测试数据。
 
 ## MCP 冒烟断言
 
